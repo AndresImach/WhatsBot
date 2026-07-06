@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo — Chatbot de WhatsApp</title>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     👇 ESTO ES LO QUE CAMBIÁS POR CADA CLIENTE (unos 2 minutos)
+     El "prompt" describe el negocio: menú, precios, horarios, reglas.
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+const NEGOCIO = {
+  nombre:   "Rotisería El Fuego",
+  avatar:   "R",                 // inicial que se muestra
+  estado:   "en línea · responde al instante",
+  saludo:   "¡Hola! 👋 Bienvenido a Rotisería El Fuego. ¿Qué te gustaría pedir hoy?",
+  chips:    ["¿Qué tienen hoy?", "¿Hacen delivery?", "¿Están abiertos?", "Quiero pedir un pollo"],
+  // Este es el "cerebro". Acá describís el negocio con sus datos reales.
+  prompt: `Sos el asistente de WhatsApp de "Rotisería El Fuego", una rotisería en San Miguel de Tucumán, Argentina.
+
+TU TRABAJO: atender clientes por WhatsApp, responder consultas y tomar pedidos. Hablás en español argentino, amable, breve y al grano, como un buen empleado de mostrador. Usás algún emoji con moderación.
+
+MENÚ Y PRECIOS:
+- Pollo entero al horno: $8500 (con papas al horno: $11000)
+- Medio pollo: $4800
+- Milanesa de carne con papas fritas: $6500
+- Milanesa napolitana con papas: $7900
+- Empanadas (docena, carne o pollo): $6000
+- Papas fritas (porción): $3000
+- Ensalada mixta: $2500
+- Gaseosa 1.5L: $2200
+
+HORARIOS: todos los días de 11:00 a 15:00 y de 20:00 a 00:30.
+
+DELIVERY: hacemos envíos a San Miguel de Tucumán y Yerba Buena. Costo de envío: $1500. Demora aproximada: 40 minutos. Pedido mínimo para envío: $6000.
+
+PAGOS: efectivo, transferencia y Mercado Pago.
+
+CÓMO TOMAR UN PEDIDO: preguntá qué quiere, confirmá los productos y el total, pedí dirección y forma de pago, y confirmá el tiempo estimado.
+
+REGLAS IMPORTANTES:
+- Respondé SOLO sobre la rotisería. Si te preguntan algo que no tiene nada que ver (política, tareas del colegio, otro tema), decí amablemente que solo podés ayudar con pedidos y consultas de la rotisería.
+- NO inventes productos, precios ni promociones que no estén en esta lista. Si no sabés algo, ofrecé pasar la conversación a una persona.
+- Si el cliente pide algo especial, una queja, o algo delicado, decile que lo derivás a una persona del local.
+- Sé breve. Es WhatsApp, no un mail.`
+};
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,"Segoe UI",Roboto,sans-serif}
+body{background:#0b141a;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px}
+.phone{width:100%;max-width:420px;height:min(760px,94vh);background:#0b141a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.bar{background:#1f2c34;padding:12px 14px;display:flex;align-items:center;gap:12px;color:#e9edef;flex-shrink:0}
+.back{color:#8aa0ad;font-size:1.4rem;line-height:1}
+.av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1FA855,#0e6b3a);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:1.1rem}
+.meta .nm{font-weight:600;font-size:1rem}
+.meta .st{font-size:.72rem;color:#8aa0ad}
+.body{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px;
+  background:#0b141a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='.6' fill='%23182631'/%3E%3C/svg%3E");}
+.bub{max-width:80%;padding:7px 10px 5px;border-radius:8px;font-size:.92rem;line-height:1.4;color:#e9edef;word-wrap:break-word;white-space:pre-wrap}
+.in{background:#1f2c34;align-self:flex-start;border-top-left-radius:2px}
+.out{background:#005c4b;align-self:flex-end;border-top-right-radius:2px}
+.tm{font-size:.62rem;opacity:.6;float:right;margin:6px 0 -2px 8px}
+.typing{align-self:flex-start;background:#1f2c34;padding:11px 14px;border-radius:8px;display:flex;gap:4px}
+.typing i{width:6px;height:6px;border-radius:50%;background:#8aa0ad;animation:b 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes b{0%,60%,100%{opacity:.3}30%{opacity:1}}
+.chips{display:flex;gap:8px;padding:8px 10px 0;overflow-x:auto;flex-shrink:0}
+.chip{white-space:nowrap;background:#1f2c34;color:#8aabbf;border:1px solid #2a3942;padding:7px 13px;border-radius:16px;font-size:.82rem;cursor:pointer}
+.chip:hover{background:#2a3942;color:#e9edef}
+.foot{padding:8px 10px;display:flex;gap:8px;align-items:center;flex-shrink:0}
+.foot input{flex:1;background:#1f2c34;border:none;color:#e9edef;padding:11px 15px;border-radius:22px;font-size:.95rem;outline:none}
+.foot input::placeholder{color:#8aa0ad}
+.send{width:44px;height:44px;border-radius:50%;background:#1FA855;border:none;color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.send:disabled{opacity:.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="bar">
+    <span class="back">‹</span>
+    <div class="av" id="av">R</div>
+    <div class="meta"><div class="nm" id="nm">Rotisería El Fuego</div><div class="st" id="st">en línea</div></div>
+  </div>
+  <div class="body" id="body"></div>
+  <div class="chips" id="chips"></div>
+  <div class="foot">
+    <input id="inp" placeholder="Escribí un mensaje" autocomplete="off">
+    <button class="send" id="send">➤</button>
+  </div>
+</div>
+
+<script>
+const body=document.getElementById('body'), inp=document.getElementById('inp'), send=document.getElementById('send'), chipsEl=document.getElementById('chips');
+document.getElementById('av').textContent=NEGOCIO.avatar;
+document.getElementById('nm').textContent=NEGOCIO.nombre;
+document.getElementById('st').textContent=NEGOCIO.estado;
+
+let history=[]; // {role, content}
+function hora(){const d=new Date();return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0')}
+function burbuja(txt,tipo){
+  const b=document.createElement('div');b.className='bub '+tipo;
+  b.innerHTML=txt.replace(/</g,'&lt;')+'<span class="tm">'+hora()+(tipo==='out'?'':' ✓✓')+'</span>';
+  body.appendChild(b);body.scrollTop=body.scrollHeight;return b;
+}
+function typing(on){
+  let t=document.getElementById('typ');
+  if(on){ if(!t){t=document.createElement('div');t.className='typing';t.id='typ';t.innerHTML='<i></i><i></i><i></i>';body.appendChild(t);body.scrollTop=body.scrollHeight;} }
+  else if(t) t.remove();
+}
+function chips(){
+  chipsEl.innerHTML='';
+  NEGOCIO.chips.forEach(c=>{const el=document.createElement('button');el.className='chip';el.textContent=c;el.onclick=()=>{inp.value=c;enviar();};chipsEl.appendChild(el);});
+}
+
+async function responder(){
+  typing(true);
+  try{
+    const r=await fetch("/api/chat",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        system:NEGOCIO.prompt,
+        messages:history
+      })
+    });
+    const data=await r.json();
+    const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('\n')||"Perdón, no pude responder. ¿Lo repetís?";
+    typing(false);
+    burbuja(txt,'in');
+    history.push({role:'assistant',content:txt});
+  }catch(e){
+    typing(false);
+    burbuja("⚠️ No me pude conectar. (En la demo real esto anda por el servidor.)",'in');
+  }
+}
+function enviar(){
+  const txt=inp.value.trim();if(!txt)return;
+  inp.value='';
+  burbuja(txt,'out');
+  history.push({role:'user',content:txt});
+  responder();
+}
+send.onclick=enviar;
+inp.addEventListener('keydown',e=>{if(e.key==='Enter')enviar();});
+
+// arranque
+burbuja(NEGOCIO.saludo,'in');
+history.push({role:'assistant',content:NEGOCIO.saludo});
+chips();
+</script>
+</body>
+</html>

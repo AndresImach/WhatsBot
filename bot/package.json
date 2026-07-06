@@ -1,0 +1,7 @@
+{
+  "name": "whatsbot",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Chatbot de WhatsApp sobre la Cloud API oficial de Meta"
+}
