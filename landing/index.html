@@ -105,12 +105,12 @@ nav{position:sticky;top:0;z-index:50;background:rgba(245,246,243,.82);backdrop-f
 .wa-status{font-size:.72rem;color:#8aa0ad}
 .wa-body{
   background:#0b141a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h1v1H0z' fill='%23131f27'/%3E%3C/svg%3E");
-  padding:16px 12px;min-height:360px;display:flex;flex-direction:column;gap:9px;justify-content:flex-end;
+  padding:16px 12px;height:496px;overflow:hidden;display:flex;flex-direction:column;gap:9px;justify-content:flex-end;
 }
 .bub{max-width:82%;padding:8px 11px;border-radius:9px;font-size:.9rem;line-height:1.4;opacity:0;transform:translateY(8px);animation:pop .4s forwards}
 .bub .t{display:block;font-size:.62rem;text-align:right;margin-top:3px;opacity:.6}
-.in{background:#1f2c34;color:#e9edef;align-self:flex-start;border-top-left-radius:2px}
-.out{background:#005c4b;color:#e9edef;align-self:flex-end;border-top-right-radius:2px}
+.bub.in{background:#1f2c34;color:#e9edef;align-self:flex-start;border-top-left-radius:2px}
+.bub.out{background:#005c4b;color:#e9edef;align-self:flex-end;border-top-right-radius:2px}
 @keyframes pop{to{opacity:1;transform:translateY(0)}}
 .typing{align-self:flex-start;background:#1f2c34;padding:11px 14px;border-radius:9px;display:flex;gap:4px;opacity:0;animation:pop .3s forwards}
 .typing span{width:6px;height:6px;border-radius:50%;background:#8aa0ad;animation:blink 1.2s infinite}
