@@ -329,7 +329,8 @@
           body: JSON.stringify({
             system: await getSystem(),
             messages: history,
-            cineId: NEGOCIO.cineId // habilita herramientas de precio/disponibilidad en el server
+            agente: NEGOCIO.agente, // 'cine' | 'tobias' | undefined → habilita herramientas en el server
+            cineId: NEGOCIO.cineId
           })
         });
         const data = await r.json();
