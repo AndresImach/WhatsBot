@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Demos — Chatbots de WhatsApp</title>
+  <script src="negocios.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif }
+    body { background: #0b141a; color: #e9edef; min-height: 100vh; min-height: 100dvh; padding: 32px 16px; display: flex; flex-direction: column; align-items: center }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 6px; text-align: center }
+    p.sub { color: #8aa0ad; font-size: .9rem; margin-bottom: 28px; text-align: center }
+    .list { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 12px }
+    a.card {
+      display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;
+      background: #1f2c34; border: 1px solid #2a3942; border-radius: 14px; padding: 14px 16px;
+      transition: background .15s, border-color .15s;
+    }
+    a.card:hover { background: #2a3942; border-color: #1FA855 }
+    .av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg, #1FA855, #0e6b3a); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; flex-shrink: 0 }
+    .info { flex: 1; min-width: 0 }
+    .nm { font-weight: 600; font-size: 1rem }
+    .sl { color: #8aa0ad; font-size: .78rem; margin-top: 2px }
+    .arrow { color: #1FA855; font-size: 1.4rem; flex-shrink: 0 }
+  </style>
+</head>
+
+<body>
+  <h1>Demos de WhatsApp</h1>
+  <p class="sub">Elegí un negocio para probar su chatbot.</p>
+  <div class="list" id="list"></div>
+
+  <script>
+    const list = document.getElementById('list');
+    Object.entries(NEGOCIOS).forEach(([slug, n]) => {
+      const a = document.createElement('a');
+      a.className = 'card';
+      a.href = 'index.html?n=' + encodeURIComponent(slug);
+      a.innerHTML =
+        '<div class="av">' + n.avatar + '</div>' +
+        '<div class="info"><div class="nm">' + n.nombre + '</div></div>' +
+        '<div class="arrow">›</div>';
+      list.appendChild(a);
+    });
+  </script>
+</body>
+
+</html>

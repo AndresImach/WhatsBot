@@ -7,50 +7,17 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Demo — Chatbot de WhatsApp</title>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-     👇 ESTO ES LO QUE CAMBIÁS POR CADA CLIENTE (unos 2 minutos)
-     El "prompt" describe el negocio: menú, precios, horarios, reglas.
-     ═══════════════════════════════════════════════════════════════ -->
+  <!-- Los negocios viven en negocios.js. Se elige cuál mostrar con ?n=<clave> en la URL. -->
+  <script src="negocios.js"></script>
   <script>
-    const NEGOCIO = {
-      nombre: "Sunstar Cinemas · Tucumán",
-      avatar: "S",
-      estado: "en línea · responde al instante",
-      saludo: "¡Hola! 🎬 Bienvenido a Sunstar Cinemas Tucumán. ¿En qué te ayudo? Puedo pasarte la cartelera, horarios, promos o dónde comprar tus entradas.",
-      chips: ["¿Qué películas hay hoy?", "Horarios de Toy Story 5", "¿Cómo funciona el 2x1?", "¿Dónde compro entradas?"],
-      prompt: `Sos el asistente de WhatsApp de "Sunstar Cinemas - Tucumán", en Argentina.
-
-TU TRABAJO: atender por WhatsApp a la gente que quiere ir al cine. Respondés cartelera, horarios, formatos (2D/3D), promociones y dónde comprar. Español argentino, amable, breve y con onda. Emojis con moderación. Es WhatsApp: respuestas cortas.
-
-UBICACIÓN: Portal de Tucumán Shopping, Av. Fermín Cariola 42, Yerba Buena, Tucumán.
-
-CARTELERA DE HOY (lunes 06/07) — títulos, formato y horarios:
-- Toy Story 5 (2D castellano): 15:40, 16:00, 17:10, 18:10, 19:30, 20:20 · (3D): 15:30, 21:40
-- Minions & Monstruos (2D castellano): 15:50, 16:10, 17:50, 18:30, 19:50, 20:30, 21:50 · (3D): 17:40, 19:40
-- Supergirl (2D castellano): 17:50, 20:00
-- Scary Movie (2D castellano): 15:20
-- Backrooms (2D castellano): 22:10
-- El Afinador (2D castellano): 22:20
-- El día de la revelación (2D castellano): 22:00
-- Obsesión (2D castellano): 22:30
-
-PRÓXIMOS ESTRENOS (pre-venta abierta):
-- La Odisea: desde el jueves 16/07
-- Spider-Man: Un nuevo día: desde el miércoles 29/07
-
-PROMOCIÓN VIGENTE:
-- LUNES 2x1: todas las semanas, en 2D y 3D. Comprando en la boletería del cine o en la página web. (Hoy es lunes, así que aplica.)
-
-COMPRA DE ENTRADAS:
-- Se compran online en la web: cinesunstar.com (o en la boletería del cine).
-- Cuando te pregunten el precio de la entrada o cómo comprar, deciles que la compra y los precios están en la web, y pasales el sitio: cinesunstar.com. No inventes un precio exacto.
-
-REGLAS:
-- Respondé SOLO sobre el cine (cartelera, horarios, formatos, promos, ubicación, compra).
-- Si preguntan por una película que NO está en la cartelera de hoy, decilo con sinceridad y ofrecé las que sí están o las pre-ventas. NO inventes funciones ni horarios.
-- Si es un reclamo, un problema con una compra, o algo delicado, no lo resuelvas vos: decí que lo derivás a una persona del cine.
-- Ante cualquier tema que no sea el cine, aclarás amablemente que solo podés ayudar con Sunstar.`
-    };
+    // Elegí el negocio según la URL: /demo?n=sunstar  → NEGOCIOS.sunstar
+    const _slug = new URLSearchParams(location.search).get('n');
+    const _claves = Object.keys(NEGOCIOS);
+    const NEGOCIO = NEGOCIOS[_slug] || NEGOCIOS[_claves[0]];
+    if (_slug && !NEGOCIOS[_slug]) {
+      // Clave inválida: mandamos al menú para elegir uno válido.
+      location.replace('menu.html');
+    }
   </script>
 
   <style>
@@ -318,6 +285,7 @@ REGLAS:
     document.getElementById('av').textContent = NEGOCIO.avatar;
     document.getElementById('nm').textContent = NEGOCIO.nombre;
     document.getElementById('st').textContent = NEGOCIO.estado;
+    document.title = NEGOCIO.nombre + ' — Demo WhatsApp';
 
     let history = []; // {role, content}
     function hora() { const d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0') }
