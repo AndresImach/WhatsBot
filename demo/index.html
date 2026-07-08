@@ -9,6 +9,8 @@
 
   <!-- Los negocios viven en negocios.js. Se elige cuál mostrar con ?n=<clave> en la URL. -->
   <script src="negocios.js"></script>
+  <!-- cartelera.js trae la cartelera en vivo para los negocios con cineId (ej: Cine Atlas). -->
+  <script src="cartelera.js"></script>
   <script>
     // Elegí el negocio según la URL: /demo?n=sunstar  → NEGOCIOS.sunstar
     const _slug = new URLSearchParams(location.search).get('n');
@@ -304,14 +306,30 @@
       NEGOCIO.chips.forEach(c => { const el = document.createElement('button'); el.className = 'chip'; el.textContent = c; el.onclick = () => { inp.value = c; enviar(); }; chipsEl.appendChild(el); });
     }
 
+    // Prompt del sistema. Para un cine con cartelera en vivo (cineId), la
+    // traemos una sola vez y la inyectamos en promptBase. Para el resto, es fijo.
+    let _systemPromise = null;
+    function getSystem() {
+      if (_systemPromise) return _systemPromise;
+      if (NEGOCIO.cineId) {
+        _systemPromise = construirCartelera(NEGOCIO.cineId)
+          .then(cart => NEGOCIO.promptBase.replace('{{CARTELERA}}', cart))
+          .catch(() => NEGOCIO.promptBase.replace('{{CARTELERA}}', 'CARTELERA: no disponible en este momento. Si te preguntan por horarios, pedí disculpas y ofrecé derivar la consulta a una persona del cine.'));
+      } else {
+        _systemPromise = Promise.resolve(NEGOCIO.prompt);
+      }
+      return _systemPromise;
+    }
+
     async function responder() {
       typing(true);
       try {
         const r = await fetch("/api/chat", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            system: NEGOCIO.prompt,
-            messages: history
+            system: await getSystem(),
+            messages: history,
+            cineId: NEGOCIO.cineId // habilita herramientas de precio/disponibilidad en el server
           })
         });
         const data = await r.json();
@@ -338,6 +356,7 @@
     burbuja(NEGOCIO.saludo, 'in');
     history.push({ role: 'assistant', content: NEGOCIO.saludo });
     chips();
+    getSystem(); // precargamos la cartelera en vivo (si el negocio la usa)
   </script>
 </body>
 
