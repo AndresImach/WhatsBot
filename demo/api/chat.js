@@ -228,8 +228,9 @@ const TOOL_REGISTRAR_PEDIDO = {
   name: "registrar_pedido",
   description:
     "Registra un pedido en el sistema de Tobías con estado 'pendiente', para que una PERSONA lo confirme (no es una confirmación final; el bot no cobra ni cierra la venta). " +
-    "Usá los 'id' de producto que devuelve buscar_producto. Confirmá con el cliente los items y su nombre antes de llamar. " +
-    "Valida disponibilidad ella misma con datos frescos: si algún item ya no está disponible, lo excluye del pedido y te avisa en 'no_disponibles' para que ofrezcas alternativa. " +
+    "Usá los 'id' de producto que devolvió buscar_producto, y copiá su 'nombre' EXACTO en 'nombre_esperado' de cada item (se usa para verificar que el id coincide con lo que le mostraste al cliente; si no coincide, la tool RECHAZA todo el pedido). " +
+    "Confirmá con el cliente los items y su nombre antes de llamar. " +
+    "Es TODO O NADA: si algún item no existe, no está disponible, o el nombre no coincide con 'nombre_esperado', NO registra nada y te devuelve el detalle para que lo corrijas o vuelvas a buscar. " +
     "Devuelve el número de pedido y el total calculado con precios reales.",
   input_schema: {
     type: "object",
@@ -243,15 +244,41 @@ const TOOL_REGISTRAR_PEDIDO = {
           type: "object",
           properties: {
             producto_id: { type: "integer", description: "id del producto (de buscar_producto)." },
+            nombre_esperado: { type: "string", description: "El 'nombre' que devolvió buscar_producto para ese id. Se valida contra la base antes de registrar." },
             cantidad: { type: "integer", description: "Cantidad pedida." },
           },
-          required: ["producto_id", "cantidad"],
+          required: ["producto_id", "nombre_esperado", "cantidad"],
         },
       },
     },
     required: ["cliente_nombre", "items"],
   },
 };
+
+// Compara el nombre que el modelo dice esperar contra el nombre real en la base.
+// Heurística tolerante a formato (mayúsculas, tildes, "X 380 GR" vs "x380gr"), pero que
+// SÍ detecta un id equivocado: exige que compartan al menos una palabra significativa
+// (≥4 letras, sin unidades/números). Esto es lo que hubiera atajado el bug real: un
+// producto_id que resolvía a "MERMELADA..." cuando el modelo esperaba un "PIROTIN...".
+function _normalizar(s) {
+  return String(s || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, ""); // saca tildes
+}
+const _UNIDADES = new Set(["GR", "KG", "ML", "LTS", "UNI", "UND", "PACK", "CAJA", "SIN", "CON"]);
+function _palabrasClave(s) {
+  return _normalizar(s)
+    .split(/[^A-Z0-9]+/)
+    .filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !_UNIDADES.has(w));
+}
+function nombreCoincide(esperado, real) {
+  if (!esperado) return true; // si no lo mandó, no bloqueamos (compatibilidad hacia atrás)
+  const a = new Set(_palabrasClave(esperado));
+  const b = new Set(_palabrasClave(real));
+  for (const w of a) if (b.has(w)) return true;
+  return a.size === 0; // nombre_esperado sin palabras clave: no podemos validar, dejamos pasar
+}
 
 async function ejecutarRegistrarPedido(input) {
   const nombre = String(input?.cliente_nombre || "").trim();
@@ -271,19 +298,37 @@ async function ejecutarRegistrarPedido(input) {
     );
     const porId = Object.fromEntries(prods.map((p) => [p.id, p]));
 
+    // TODO O NADA: si CUALQUIER item falla (id inexistente, no disponible, o el nombre
+    // no coincide con lo que el modelo dice haber mostrado), se rechaza el pedido ENTERO.
+    // Antes esto solo excluía el item problemático y registraba el resto igual — así fue
+    // como un producto_id equivocado terminó armando un pedido real con un producto
+    // totalmente distinto al que se le había cotizado al cliente.
+    const problemas = [];
     const items = [];
-    const noDisponibles = [];
     let total = 0;
     for (const it of pedido) {
-      const p = porId[Number(it.producto_id)];
+      const idNum = Number(it.producto_id);
       const cantidad = Math.max(Number(it.cantidad) || 0, 0);
-      if (!p || !cantidad) continue;
-      // Chequeo de disponibilidad con dato fresco (mismo criterio que buscar_producto):
-      // reemplaza la necesidad de un round-trip separado de verificar_disponibilidad
-      // antes de cada pedido. También cierra un caso que antes no se validaba acá:
-      // un producto con price <= 0 podía terminar en un pedido sin chequeo.
+      const p = porId[idNum];
+      if (!p) {
+        problemas.push({ producto_id: idNum, motivo: "no existe ese producto_id", nombre_esperado: it.nombre_esperado || null });
+        continue;
+      }
+      if (!cantidad) {
+        problemas.push({ producto_id: idNum, motivo: "cantidad inválida" });
+        continue;
+      }
+      if (!nombreCoincide(it.nombre_esperado, p.name)) {
+        problemas.push({
+          producto_id: idNum,
+          motivo: "el nombre_esperado no coincide con el producto real de ese id — probable id equivocado",
+          nombre_esperado: it.nombre_esperado,
+          nombre_real_en_base: p.name,
+        });
+        continue;
+      }
       if (!p.available || !(p.price > 0)) {
-        noDisponibles.push({ id: p.id, nombre: p.name });
+        problemas.push({ producto_id: idNum, motivo: "no disponible", nombre: p.name });
         continue;
       }
       total += p.price * cantidad;
@@ -294,10 +339,11 @@ async function ejecutarRegistrarPedido(input) {
       prod.borgestProduct = null;
       items.push({ product: prod, quantity: cantidad });
     }
-    if (!items.length) {
+    if (problemas.length) {
+      // No se registra NADA si hubo cualquier problema — evita pedidos parciales/erróneos.
       return JSON.stringify({
-        error: "Ninguno de los productos está disponible para vender.",
-        no_disponibles: noDisponibles,
+        error: "No se registró el pedido: hay items con problemas. Volvé a buscarlos con buscar_producto y corregí antes de reintentar.",
+        problemas,
       });
     }
     total = Math.round(total * 100) / 100;
@@ -313,7 +359,6 @@ async function ejecutarRegistrarPedido(input) {
       estado: "pendiente de confirmación por una persona",
       total,
       resumen: items.map((i) => ({ producto: i.product.name, cantidad: i.quantity, precio_unitario: i.product.price })),
-      ...(noDisponibles.length ? { no_disponibles: noDisponibles } : {}),
     });
   } catch (e) {
     return JSON.stringify({ error: "No se pudo registrar el pedido en este momento." });
