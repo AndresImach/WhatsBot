@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumen de conversaciones — Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif }
+    body { background: #0b141a; color: #e9edef; min-height: 100vh; padding: 24px 16px 60px }
+    .wrap { max-width: 760px; margin: 0 auto }
+    h1 { font-size: 1.4rem; font-weight: 700 }
+    .tot { color: #8aa0ad; font-size: .9rem; margin: 6px 0 20px }
+    .conv { background: #1f2c34; border: 1px solid #2a3942; border-radius: 14px; margin-bottom: 16px; overflow: hidden }
+    .chead { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #22333c; cursor: pointer }
+    .chead .nm { font-weight: 600 }
+    .chead .meta { color: #8aa0ad; font-size: .78rem }
+    .chead .cost { margin-left: auto; font-weight: 700; color: #7fdca4 }
+    .turns { padding: 6px 14px 12px }
+    .turn { border-top: 1px solid #2a3942; padding: 10px 0 }
+    .msg { display: flex; gap: 8px; margin: 3px 0; align-items: flex-start }
+    .who { font-size: .7rem; font-weight: 700; min-width: 46px; padding-top: 2px }
+    .who.u { color: #8aabbf }
+    .who.b { color: #7fdca4 }
+    .txt { white-space: pre-wrap; font-size: .9rem; line-height: 1.35; flex: 1 }
+    .tmeta { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: .72rem; color: #8aa0ad }
+    .badge { padding: 1px 8px; border-radius: 10px; font-weight: 700; font-size: .68rem }
+    .badge.haiku { background: #14361f; color: #7fdca4 }
+    .badge.sonnet { background: #3a2a14; color: #e0b070 }
+    .badge.otro { background: #2a3942; color: #b8c4cc }
+    .hidden { display: none }
+    .empty { color: #8aa0ad; text-align: center; margin-top: 40px }
+    button.reload { background: #1FA855; color: #fff; border: none; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: .85rem; margin-bottom: 18px }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Resumen de conversaciones</h1>
+    <div class="tot" id="tot">Cargando…</div>
+    <button class="reload" onclick="cargar()">↻ Actualizar</button>
+    <div id="lista"></div>
+  </div>
+
+  <script>
+    const fmtUsd = (n) => '$' + (n || 0).toFixed(4);
+    function badge(model) {
+      const m = (model || '').toLowerCase();
+      if (m.includes('haiku')) return '<span class="badge haiku">Haiku</span>';
+      if (m.includes('sonnet')) return '<span class="badge sonnet">Sonnet</span>';
+      return '<span class="badge otro">' + (model || '?') + '</span>';
+    }
+    function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function hora(ts) { return (ts || '').slice(0, 16).replace('T', ' '); }
+
+    async function cargar() {
+      document.getElementById('tot').textContent = 'Cargando…';
+      try {
+        const r = await fetch('/api/logs' + location.search);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const { conversaciones = [] } = await r.json();
+        render(conversaciones);
+      } catch (e) {
+        document.getElementById('tot').textContent = 'No se pudo cargar (' + e.message + '). Si pusiste LOG_TOKEN, agregá ?key=TU_TOKEN a la URL.';
+        document.getElementById('lista').innerHTML = '';
+      }
+    }
+
+    function render(convs) {
+      const lista = document.getElementById('lista');
+      const totUsd = convs.reduce((a, c) => a + (c.totalUsd || 0), 0);
+      document.getElementById('tot').textContent =
+        convs.length + ' conversaciones · costo total ' + fmtUsd(totUsd);
+      if (!convs.length) { lista.innerHTML = '<div class="empty">Todavía no hay conversaciones registradas.</div>'; return; }
+
+      lista.innerHTML = convs.map((c, i) => {
+        const turnos = c.turnos.map((t) => `
+          <div class="turn">
+            <div class="msg"><div class="who u">Cliente</div><div class="txt">${esc(t.userMsg) || '<i>—</i>'}</div></div>
+            <div class="msg"><div class="who b">Bot</div><div class="txt">${esc(t.botMsg) || '<i>—</i>'}</div></div>
+            <div class="tmeta">${badge(t.model)}<span>${hora(t.ts)}</span><span>${(t.inputTokens || 0) + (t.outputTokens || 0)} tok</span><span>${fmtUsd(t.costUsd)}</span></div>
+          </div>`).join('');
+        return `
+          <div class="conv">
+            <div class="chead" onclick="this.nextElementSibling.classList.toggle('hidden')">
+              <span class="nm">${esc(c.negocio) || 'negocio'}</span>
+              <span class="meta">${c.turnos.length} turnos · ${hora(c.inicio)}</span>
+              <span class="cost">${fmtUsd(c.totalUsd)}</span>
+            </div>
+            <div class="turns ${i === 0 ? '' : 'hidden'}">${turnos}</div>
+          </div>`;
+      }).join('');
+    }
+
+    cargar();
+  </script>
+</body>
+
+</html>

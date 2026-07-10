@@ -7,7 +7,10 @@
 //   - "tobias" → buscar_productos + crear_pedido (catálogo y pedidos reales en Turso)
 //
 // En Vercel (proyecto del demo): Settings → Environment Variables:
-//   ANTHROPIC_API_KEY, y para Tobías: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+//   ANTHROPIC_API_KEY
+//   Para Tobías: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN (catálogo/pedidos reales)
+//   Para el registro de conversaciones del demo (base APARTE, no la de Tobías):
+//     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
 const CINE_API = "https://apiv2.gaf.adro.studio";
 // Router de 2 capas: un clasificador barato decide quién atiende cada mensaje.
 //   - MODEL_BARATO: atiende lo simple (catálogo, precios, horarios, pedidos normales). ~85%.
@@ -75,12 +78,11 @@ function _decode(cell) {
   if (cell.type === "integer" || cell.type === "float") return Number(cell.value);
   return cell.value;
 }
-async function turso(sql, args = []) {
-  const raw = process.env.TURSO_DATABASE_URL || "";
-  const base = raw.replace(/^libsql:\/\//, "https://").replace(/\/$/, "");
+async function _turso(rawUrl, authToken, sql, args = []) {
+  const base = (rawUrl || "").replace(/^libsql:\/\//, "https://").replace(/\/$/, "");
   const r = await fetch(base + "/v2/pipeline", {
     method: "POST",
-    headers: { Authorization: "Bearer " + (process.env.TURSO_AUTH_TOKEN || ""), "Content-Type": "application/json" },
+    headers: { Authorization: "Bearer " + (authToken || ""), "Content-Type": "application/json" },
     body: JSON.stringify({ requests: [{ type: "execute", stmt: { sql, args: args.map(_tursoArg) } }, { type: "close" }] }),
   });
   const d = await r.json();
@@ -88,6 +90,16 @@ async function turso(sql, args = []) {
   if (!res || res.type !== "ok") throw new Error("Turso: " + JSON.stringify(res?.error || d).slice(0, 200));
   const rr = res.response.result;
   return rr.rows.map((row) => Object.fromEntries(row.map((c, i) => [rr.cols[i].name, _decode(c)])));
+}
+
+// Base de datos de Tobías (catálogo y pedidos).
+function turso(sql, args = []) {
+  return _turso(process.env.TURSO_DATABASE_URL, process.env.TURSO_AUTH_TOKEN, sql, args);
+}
+// Base de datos SEPARADA solo para el registro de conversaciones del demo
+// (no vive en la base de Tobías ni en la de ningún cliente).
+function tursoLogs(sql, args = []) {
+  return _turso(process.env.LOG_TURSO_DATABASE_URL, process.env.LOG_TURSO_AUTH_TOKEN, sql, args);
 }
 
 // ─────────────────────────── Herramientas: TOBIAS ───────────────────────────
@@ -263,7 +275,7 @@ async function elegirModelo(messages) {
     .slice(-6)
     .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "" }))
     .filter((m) => m.content);
-  if (!ultimos.length) return MODEL_BARATO;
+  if (!ultimos.length) return { model: MODEL_BARATO, usage: {} };
 
   const instruccion =
     "Sos un clasificador. Mirá el ÚLTIMO mensaje del cliente en esta conversación y decidí quién debe atenderlo:\n" +
@@ -277,16 +289,74 @@ async function elegirModelo(messages) {
       model: MODEL_ROUTER,
       maxTokens: 5,
     });
-    if (status !== 200) return MODEL_EXPERTO;
+    if (status !== 200) return { model: MODEL_EXPERTO, usage: {} };
     const txt = (data.content || [])
       .filter((x) => x.type === "text")
       .map((x) => x.text)
       .join(" ")
       .toLowerCase();
-    return txt.includes("experto") ? MODEL_EXPERTO : MODEL_BARATO;
+    const model = txt.includes("experto") ? MODEL_EXPERTO : MODEL_BARATO;
+    return { model, usage: data.usage || {} };
   } catch {
-    return MODEL_EXPERTO;
+    return { model: MODEL_EXPERTO, usage: {} };
   }
+}
+
+// ─────────────────────────── Costos y registro ───────────────────────────
+// Precios por millón de tokens (USD). El cache read se cobra ~10× más barato.
+const PRECIOS = {
+  "claude-haiku-4-5": { in: 1, out: 5 },
+  "claude-sonnet-4-6": { in: 3, out: 15 },
+};
+function costoUsd(model, usage) {
+  const p = PRECIOS[model] || PRECIOS[MODEL_EXPERTO];
+  const inNoCache = usage.input_tokens || 0;
+  const cacheRead = usage.cache_read_input_tokens || 0;
+  const out = usage.output_tokens || 0;
+  return (inNoCache * p.in + cacheRead * p.in * 0.1 + out * p.out) / 1e6;
+}
+function sumarUsage(acc, usage) {
+  acc.input_tokens += usage?.input_tokens || 0;
+  acc.output_tokens += usage?.output_tokens || 0;
+  acc.cache_read_input_tokens += usage?.cache_read_input_tokens || 0;
+}
+
+// Guarda un resumen del turno en la base SEPARADA de logs (no la de Tobías). Best-effort: nunca rompe la respuesta.
+async function registrarLog(rec) {
+  if (!process.env.LOG_TURSO_DATABASE_URL) return;
+  try {
+    await tursoLogs(
+      'INSERT INTO "DemoChatLog" (convId, negocio, agente, model, userMsg, botMsg, inputTokens, outputTokens, cacheReadTokens, costUsd) ' +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        rec.convId || null,
+        rec.negocio || null,
+        rec.agente || null,
+        rec.model || null,
+        rec.userMsg || null,
+        rec.botMsg || null,
+        rec.inputTokens || 0,
+        rec.outputTokens || 0,
+        rec.cacheReadTokens || 0,
+        rec.costUsd || 0,
+      ]
+    );
+  } catch (e) {
+    console.error("log:", e.message);
+  }
+}
+
+function textoDe(content) {
+  return (content || [])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+}
+function ultimoMensajeUsuario(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user" && typeof messages[i].content === "string") return messages[i].content;
+  }
+  return "";
 }
 
 export default async function handler(req, res) {
@@ -294,7 +364,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
   try {
-    const { system, messages, agente, cineId } = req.body || {};
+    const { system, messages, agente, cineId, convId, negocio } = req.body || {};
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "messages es requerido" });
     }
@@ -304,13 +374,23 @@ export default async function handler(req, res) {
     const convo = messages.slice();
 
     // Router: elegimos el modelo según la dificultad del último mensaje.
-    const model = await elegirModelo(messages);
+    const { model, usage: routerUsage } = await elegirModelo(messages);
+
+    // Acumulamos el consumo del handler a lo largo del loop para el log de costos.
+    const handlerUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
+    let finalData = null;
+    let finalStatus = 200;
 
     // Loop de herramientas: sin tools, sale en la 1ª vuelta.
     for (let ronda = 0; ronda <= MAX_TOOL_ROUNDS; ronda++) {
       const { status, data } = await llamarClaude({ system, messages: convo, tools, model });
       if (status !== 200) return res.status(status).json(data);
-      if (data.stop_reason !== "tool_use") return res.status(200).json(data);
+      sumarUsage(handlerUsage, data.usage);
+      if (data.stop_reason !== "tool_use") {
+        finalData = data;
+        finalStatus = status;
+        break;
+      }
 
       convo.push({ role: "assistant", content: data.content });
       const resultados = [];
@@ -324,8 +404,30 @@ export default async function handler(req, res) {
     }
 
     // Se agotaron las rondas: respuesta final sin herramientas.
-    const { status, data } = await llamarClaude({ system, messages: convo, model });
-    return res.status(status).json(data);
+    if (!finalData) {
+      const { status, data } = await llamarClaude({ system, messages: convo, model });
+      if (status !== 200) return res.status(status).json(data);
+      sumarUsage(handlerUsage, data.usage);
+      finalData = data;
+      finalStatus = status;
+    }
+
+    // Registro del turno (costo = handler + router). No bloquea la respuesta.
+    const costoTurno = costoUsd(model, handlerUsage) + costoUsd(MODEL_ROUTER, routerUsage);
+    registrarLog({
+      convId,
+      negocio,
+      agente,
+      model,
+      userMsg: ultimoMensajeUsuario(messages),
+      botMsg: textoDe(finalData.content),
+      inputTokens: handlerUsage.input_tokens,
+      outputTokens: handlerUsage.output_tokens,
+      cacheReadTokens: handlerUsage.cache_read_input_tokens,
+      costUsd: Math.round(costoTurno * 1e6) / 1e6,
+    });
+
+    return res.status(finalStatus).json(finalData);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Error interno del proxy" });
