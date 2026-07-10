@@ -4,7 +4,24 @@
 // Según "agente" se habilitan HERRAMIENTAS (tool use) y el servidor las ejecuta en un
 // loop, devolviéndole el resultado al modelo hasta que produce la respuesta final:
 //   - "cine"   → consultar_funcion (precio/disponibilidad reales de una función, API del cine)
-//   - "tobias" → buscar_productos + crear_pedido (catálogo y pedidos reales en Turso)
+//   - "tobias" → buscar_producto + verificar_disponibilidad + registrar_pedido
+//                (catálogo, disponibilidad y pedidos reales en Turso)
+//
+// PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
+// flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
+// Hay DOS breakpoints de caché por request:
+//   1) al final del system → cachea el prefijo estable (tools + system).
+//   2) al final del ÚLTIMO mensaje de la conversación → cachea también el historial
+//      acumulado (incluidos resultados de tools de rondas anteriores), que es lo que
+//      realmente crece dentro de un mismo turno (loop de herramientas) y entre turnos.
+// CONTROL DE COSTOS ADICIONAL:
+//   - buscar_producto devuelve menos resultados por defecto (se reenvían en cada ronda
+//     siguiente del loop, así que menos filas = menos tokens repetidos).
+//   - registrar_pedido valida disponibilidad en tiempo real él mismo (relee la fila fresca
+//     de la base), así que verificar_disponibilidad es opcional para el modelo y no un
+//     paso obligatorio que agregue una ronda extra por pedido.
+//   - el historial de la conversación tiene un techo defensivo (podarHistorial) para
+//     que una sesión de demo muy larga no crezca sin límite.
 //
 // En Vercel (proyecto del demo): Settings → Environment Variables:
 //   ANTHROPIC_API_KEY
@@ -103,8 +120,8 @@ function tursoLogs(sql, args = []) {
 }
 
 // ─────────────────────────── Herramientas: TOBIAS ───────────────────────────
-const TOOL_BUSCAR_PRODUCTOS = {
-  name: "buscar_productos",
+const TOOL_BUSCAR_PRODUCTO = {
+  name: "buscar_producto",
   description:
     "Busca en el catálogo REAL de Tobías Distribuciones (insumos de repostería) por nombre y/o categoría. " +
     "Usala para: ver si venden un producto, saber su precio, o encontrar ALTERNATIVAS (buscando por categoría o palabra clave) cuando piden algo que no tienen. " +
@@ -114,15 +131,18 @@ const TOOL_BUSCAR_PRODUCTOS = {
     properties: {
       texto: { type: "string", description: "Palabras clave del producto, ej: 'chocolate cobertura' o 'mermelada frutilla'." },
       categoria: { type: "string", description: "Nombre (o parte) de una categoría/rubro para filtrar o buscar alternativas, ej: 'HARINA'." },
-      limite: { type: "integer", description: "Máximo de resultados (por defecto 8)." },
+      limite: { type: "integer", description: "Máximo de resultados (por defecto 5, máximo 8). Pedí pocos: se reenvían en cada ronda siguiente de la conversación." },
     },
   },
 };
 
-async function ejecutarBuscarProductos(input) {
+// Límites bajos a propósito: cada resultado que devuelve esta tool se reenvía de nuevo
+// en las rondas siguientes del loop (y en el resto del turno), así que menos filas =
+// menos tokens repetidos. 5-8 alcanza para que el modelo elija u ofrezca alternativas.
+async function ejecutarBuscarProducto(input) {
   const texto = String(input?.texto || "").trim();
   const categoria = String(input?.categoria || "").trim();
-  const limite = Math.min(Math.max(Number(input?.limite) || 8, 1), 15);
+  const limite = Math.min(Math.max(Number(input?.limite) || 5, 1), 8);
   if (!texto && !categoria) return JSON.stringify({ error: "Indicá 'texto' o 'categoria' para buscar." });
   try {
     let sql =
@@ -155,11 +175,61 @@ async function ejecutarBuscarProductos(input) {
   }
 }
 
-const TOOL_CREAR_PEDIDO = {
-  name: "crear_pedido",
+// verificar_disponibilidad: chequea un producto puntual por id, para cuando el cliente
+// pregunta explícitamente por stock antes de decidir. NO es un paso obligatorio antes de
+// registrar_pedido: esa tool ya relee la disponibilidad fresca de la base ella misma, así
+// que usar esta acá solo cuando agrega valor evita una ronda extra (y su reenvío de
+// contexto) en el camino común de un pedido.
+// El esquema real solo tiene un booleano 'available' (no hay stock numérico), así que
+// devuelve disponible/no-disponible + el precio vigente.
+const TOOL_VERIFICAR_DISPONIBILIDAD = {
+  name: "verificar_disponibilidad",
+  description:
+    "Verifica, por su 'id' (de buscar_producto), si un producto puntual está DISPONIBLE para vender y a qué PRECIO vigente. " +
+    "Usala solo cuando el cliente pregunta explícitamente por stock/disponibilidad ANTES de decidir el pedido. " +
+    "NO hace falta llamarla como paso previo a registrar_pedido: esa tool ya valida disponibilidad ella misma con datos frescos.",
+  input_schema: {
+    type: "object",
+    properties: {
+      producto_id: { type: "integer", description: "id del producto (de buscar_producto)." },
+      cantidad: { type: "integer", description: "Cantidad que quiere el cliente." },
+    },
+    required: ["producto_id", "cantidad"],
+  },
+};
+
+async function ejecutarVerificarDisponibilidad(input) {
+  const id = Number(input?.producto_id);
+  const cantidad = Math.max(Number(input?.cantidad) || 1, 1);
+  if (!id) return JSON.stringify({ error: "Falta un 'producto_id' válido." });
+  try {
+    const rows = await turso(
+      'SELECT p.id, p.name, p.price, p.available, c.name AS categoria ' +
+        'FROM "Product" p JOIN "Category" c ON c.id = p.categoryId WHERE p.id = ? LIMIT 1',
+      [id]
+    );
+    if (!rows.length) return JSON.stringify({ error: "No existe ese producto_id.", producto_id: id });
+    const p = rows[0];
+    // Solo datos necesarios (compacto para no inflar tokens de entrada).
+    return JSON.stringify({
+      id: p.id,
+      nombre: p.name,
+      precio: p.price,
+      categoria: p.categoria,
+      cantidad_solicitada: cantidad,
+      disponible: !!p.available && p.price > 0,
+    });
+  } catch (e) {
+    return JSON.stringify({ error: "No se pudo verificar la disponibilidad en este momento." });
+  }
+}
+
+const TOOL_REGISTRAR_PEDIDO = {
+  name: "registrar_pedido",
   description:
     "Registra un pedido en el sistema de Tobías con estado 'pendiente', para que una PERSONA lo confirme (no es una confirmación final; el bot no cobra ni cierra la venta). " +
-    "Usá los 'id' de producto que devuelve buscar_productos. Confirmá con el cliente los items y su nombre antes de llamar. " +
+    "Usá los 'id' de producto que devuelve buscar_producto. Confirmá con el cliente los items y su nombre antes de llamar. " +
+    "Valida disponibilidad ella misma con datos frescos: si algún item ya no está disponible, lo excluye del pedido y te avisa en 'no_disponibles' para que ofrezcas alternativa. " +
     "Devuelve el número de pedido y el total calculado con precios reales.",
   input_schema: {
     type: "object",
@@ -172,7 +242,7 @@ const TOOL_CREAR_PEDIDO = {
         items: {
           type: "object",
           properties: {
-            producto_id: { type: "integer", description: "id del producto (de buscar_productos)." },
+            producto_id: { type: "integer", description: "id del producto (de buscar_producto)." },
             cantidad: { type: "integer", description: "Cantidad pedida." },
           },
           required: ["producto_id", "cantidad"],
@@ -183,7 +253,7 @@ const TOOL_CREAR_PEDIDO = {
   },
 };
 
-async function ejecutarCrearPedido(input) {
+async function ejecutarRegistrarPedido(input) {
   const nombre = String(input?.cliente_nombre || "").trim();
   const telefono = String(input?.cliente_telefono || "").trim();
   const pedido = Array.isArray(input?.items) ? input.items : [];
@@ -202,11 +272,20 @@ async function ejecutarCrearPedido(input) {
     const porId = Object.fromEntries(prods.map((p) => [p.id, p]));
 
     const items = [];
+    const noDisponibles = [];
     let total = 0;
     for (const it of pedido) {
       const p = porId[Number(it.producto_id)];
       const cantidad = Math.max(Number(it.cantidad) || 0, 0);
       if (!p || !cantidad) continue;
+      // Chequeo de disponibilidad con dato fresco (mismo criterio que buscar_producto):
+      // reemplaza la necesidad de un round-trip separado de verificar_disponibilidad
+      // antes de cada pedido. También cierra un caso que antes no se validaba acá:
+      // un producto con price <= 0 podía terminar en un pedido sin chequeo.
+      if (!p.available || !(p.price > 0)) {
+        noDisponibles.push({ id: p.id, nombre: p.name });
+        continue;
+      }
       total += p.price * cantidad;
       const { c_id, c_name, c_slug, c_emoji, c_order, c_createdAt, ...prod } = p;
       prod.available = !!prod.available;
@@ -215,7 +294,12 @@ async function ejecutarCrearPedido(input) {
       prod.borgestProduct = null;
       items.push({ product: prod, quantity: cantidad });
     }
-    if (!items.length) return JSON.stringify({ error: "No se pudo armar el pedido con esos productos." });
+    if (!items.length) {
+      return JSON.stringify({
+        error: "Ninguno de los productos está disponible para vender.",
+        no_disponibles: noDisponibles,
+      });
+    }
     total = Math.round(total * 100) / 100;
 
     await turso(
@@ -229,6 +313,7 @@ async function ejecutarCrearPedido(input) {
       estado: "pendiente de confirmación por una persona",
       total,
       resumen: items.map((i) => ({ producto: i.product.name, cantidad: i.quantity, precio_unitario: i.product.price })),
+      ...(noDisponibles.length ? { no_disponibles: noDisponibles } : {}),
     });
   } catch (e) {
     return JSON.stringify({ error: "No se pudo registrar el pedido en este momento." });
@@ -236,19 +321,57 @@ async function ejecutarCrearPedido(input) {
 }
 
 // ─────────────────────────── Selección y dispatch ───────────────────────────
+// El orden de las tools es FIJO: forma parte del prefijo cacheado (tools → system).
+// Reordenarlas invalidaría el caché, así que se mantienen como literal estable.
 function toolsPara(agente, cineId) {
   if (agente === "cine" && cineId) return [TOOL_CONSULTAR_FUNCION];
-  if (agente === "tobias") return [TOOL_BUSCAR_PRODUCTOS, TOOL_CREAR_PEDIDO];
+  if (agente === "tobias") return [TOOL_BUSCAR_PRODUCTO, TOOL_VERIFICAR_DISPONIBILIDAD, TOOL_REGISTRAR_PEDIDO];
   return undefined;
 }
 async function ejecutarTool(name, input, ctx) {
   if (name === "consultar_funcion") return ejecutarConsultarFuncion(ctx.cineId, input);
-  if (name === "buscar_productos") return ejecutarBuscarProductos(input);
-  if (name === "crear_pedido") return ejecutarCrearPedido(input);
+  if (name === "buscar_producto") return ejecutarBuscarProducto(input);
+  if (name === "verificar_disponibilidad") return ejecutarVerificarDisponibilidad(input);
+  if (name === "registrar_pedido") return ejecutarRegistrarPedido(input);
   return JSON.stringify({ error: "Herramienta desconocida." });
 }
 
-async function llamarClaude({ system, messages, tools, model, maxTokens }) {
+// Prompt caching: con cache=true, el prompt del sistema se manda como un bloque de
+// texto con cache_control ephemeral. El orden de render es tools → system, así que un
+// solo breakpoint al final del system cachea TODO el prefijo estable (tools + system).
+// Ese prefijo se reusa en cada ronda del loop de herramientas y en cada turno de la
+// conversación (caché de 5 min), en vez de reprocesarse como "no_cache" cada vez.
+//   Nota: en Haiku 4.5 el mínimo cacheable es ~4096 tokens. Si el prefijo es más corto
+//   (p. ej. Tobías sin cartelera), simplemente no se escribe caché: no hay error ni
+//   costo extra, y el ahorro aparece solo cuando el prefijo supera ese umbral
+//   (cine con cartelera, o conversaciones largas).
+function armarSystem(system, cache) {
+  const txt = system || "";
+  if (!cache || !txt) return txt;
+  return [{ type: "text", text: txt, cache_control: { type: "ephemeral" } }];
+}
+
+// Segundo breakpoint: al final del ÚLTIMO mensaje de la conversación. Esto es lo que
+// más importa en la práctica: el loop de herramientas reenvía TODA la conversación
+// (incluidos resultados de tools de rondas anteriores) en cada ronda, y cada turno
+// reenvía todo el historial. Con este marker, la ronda/turno siguiente lee ese prefijo
+// a ~0.1x en vez de precio completo, en vez de solo cachear el system+tools (que en
+// Tobías casi nunca llega al mínimo cacheable por sí solo).
+// cache_control solo puede ir en un content block, no en un string plano: si el último
+// mensaje tiene content string se lo envuelve en un bloque de texto.
+function conCacheEnUltimoMensaje(messages) {
+  if (!messages || !messages.length) return messages;
+  const ultimo = messages[messages.length - 1];
+  const content =
+    typeof ultimo.content === "string"
+      ? [{ type: "text", text: ultimo.content }]
+      : ultimo.content.map((b) => ({ ...b }));
+  if (!content.length) return messages;
+  content[content.length - 1] = { ...content[content.length - 1], cache_control: { type: "ephemeral" } };
+  return [...messages.slice(0, -1), { role: ultimo.role, content }];
+}
+
+async function llamarClaude({ system, messages, tools, model, maxTokens, cache = false }) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -259,8 +382,8 @@ async function llamarClaude({ system, messages, tools, model, maxTokens }) {
     body: JSON.stringify({
       model: model || MODEL_EXPERTO,
       max_tokens: maxTokens || 1000,
-      system: system || "",
-      messages,
+      system: armarSystem(system, cache),
+      messages: cache ? conCacheEnUltimoMensaje(messages) : messages,
       ...(tools ? { tools } : {}),
     }),
   });
@@ -311,14 +434,18 @@ const PRECIOS = {
 function costoUsd(model, usage) {
   const p = PRECIOS[model] || PRECIOS[MODEL_EXPERTO];
   const inNoCache = usage.input_tokens || 0;
+  // Escritura de caché (~1.25x) y lectura (~0.1x): ambas hay que sumarlas o el costo
+  // logueado queda subestimado apenas el caché empieza a escribir.
+  const cacheWrite = usage.cache_creation_input_tokens || 0;
   const cacheRead = usage.cache_read_input_tokens || 0;
   const out = usage.output_tokens || 0;
-  return (inNoCache * p.in + cacheRead * p.in * 0.1 + out * p.out) / 1e6;
+  return (inNoCache * p.in + cacheWrite * p.in * 1.25 + cacheRead * p.in * 0.1 + out * p.out) / 1e6;
 }
 function sumarUsage(acc, usage) {
   acc.input_tokens += usage?.input_tokens || 0;
   acc.output_tokens += usage?.output_tokens || 0;
   acc.cache_read_input_tokens += usage?.cache_read_input_tokens || 0;
+  acc.cache_creation_input_tokens += usage?.cache_creation_input_tokens || 0;
 }
 
 // Guarda un resumen del turno en la base SEPARADA de logs (no la de Tobías). Best-effort: nunca rompe la respuesta.
@@ -359,6 +486,19 @@ function ultimoMensajeUsuario(messages) {
   return "";
 }
 
+// Techo defensivo: en una sesión de demo excepcionalmente larga, evita reenviar un
+// historial que crece sin límite (costo y, eventualmente, la ventana de contexto).
+// No afecta conversaciones normales (bien por debajo del límite). Corta buscando el
+// próximo mensaje de rol "user" para no romper la regla de que el primer mensaje
+// enviado a la API debe ser "user".
+const MAX_HISTORIAL = 40;
+function podarHistorial(messages) {
+  if (messages.length <= MAX_HISTORIAL) return messages.slice();
+  let corte = messages.length - MAX_HISTORIAL;
+  while (corte < messages.length && messages[corte].role !== "user") corte++;
+  return messages.slice(corte);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -371,19 +511,19 @@ export default async function handler(req, res) {
 
     const tools = toolsPara(agente, cineId);
     const ctx = { cineId };
-    const convo = messages.slice();
+    const convo = podarHistorial(messages);
 
     // Router: elegimos el modelo según la dificultad del último mensaje.
     const { model, usage: routerUsage } = await elegirModelo(messages);
 
     // Acumulamos el consumo del handler a lo largo del loop para el log de costos.
-    const handlerUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
+    const handlerUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
     let finalData = null;
     let finalStatus = 200;
 
     // Loop de herramientas: sin tools, sale en la 1ª vuelta.
     for (let ronda = 0; ronda <= MAX_TOOL_ROUNDS; ronda++) {
-      const { status, data } = await llamarClaude({ system, messages: convo, tools, model });
+      const { status, data } = await llamarClaude({ system, messages: convo, tools, model, cache: true });
       if (status !== 200) return res.status(status).json(data);
       sumarUsage(handlerUsage, data.usage);
       if (data.stop_reason !== "tool_use") {
@@ -405,7 +545,7 @@ export default async function handler(req, res) {
 
     // Se agotaron las rondas: respuesta final sin herramientas.
     if (!finalData) {
-      const { status, data } = await llamarClaude({ system, messages: convo, model });
+      const { status, data } = await llamarClaude({ system, messages: convo, model, cache: true });
       if (status !== 200) return res.status(status).json(data);
       sumarUsage(handlerUsage, data.usage);
       finalData = data;
