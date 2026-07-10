@@ -9,7 +9,14 @@
 // En Vercel (proyecto del demo): Settings → Environment Variables:
 //   ANTHROPIC_API_KEY, y para Tobías: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
 const CINE_API = "https://apiv2.gaf.adro.studio";
-const MODEL = "claude-sonnet-4-6";
+// Router de 2 capas: un clasificador barato decide quién atiende cada mensaje.
+//   - MODEL_BARATO: atiende lo simple (catálogo, precios, horarios, pedidos normales). ~85%.
+//   - MODEL_EXPERTO: solo lo que pide criterio (reclamos, pagos/entregas, temas delicados,
+//     pedir hablar con una persona, ambigüedad). ~15%.
+// El clasificador corre en el modelo barato y cuesta centavos.
+const MODEL_BARATO = "claude-haiku-4-5";
+const MODEL_EXPERTO = "claude-sonnet-4-6";
+const MODEL_ROUTER = "claude-haiku-4-5";
 const MAX_TOOL_ROUNDS = 5;
 
 // ─────────────────────────── Herramientas: CINE ───────────────────────────
@@ -229,7 +236,7 @@ async function ejecutarTool(name, input, ctx) {
   return JSON.stringify({ error: "Herramienta desconocida." });
 }
 
-async function llamarClaude({ system, messages, tools }) {
+async function llamarClaude({ system, messages, tools, model, maxTokens }) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -238,14 +245,48 @@ async function llamarClaude({ system, messages, tools }) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1000,
+      model: model || MODEL_EXPERTO,
+      max_tokens: maxTokens || 1000,
       system: system || "",
       messages,
       ...(tools ? { tools } : {}),
     }),
   });
   return { status: r.status, data: await r.json() };
+}
+
+// Router: clasifica el último mensaje del cliente y elige el modelo que lo atiende.
+// Corre en el modelo barato mirando solo los últimos turnos (texto), así cuesta muy poco.
+// Ante cualquier duda o error, escala al modelo experto (prioriza calidad sobre costo).
+async function elegirModelo(messages) {
+  const ultimos = (messages || [])
+    .slice(-6)
+    .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "" }))
+    .filter((m) => m.content);
+  if (!ultimos.length) return MODEL_BARATO;
+
+  const instruccion =
+    "Sos un clasificador. Mirá el ÚLTIMO mensaje del cliente en esta conversación y decidí quién debe atenderlo:\n" +
+    "- 'simple': consultas de información, catálogo, productos, precios, horarios, cartelera, disponibilidad, o un pedido/compra normal, saludos y charla común.\n" +
+    "- 'experto': reclamos o quejas, un problema con un pago, compra o entrega, temas delicados o sensibles, pedidos de hablar con una persona, o situaciones ambiguas que requieran criterio.\n" +
+    "Respondé SOLO con una palabra, en minúscula: simple o experto.";
+  try {
+    const { status, data } = await llamarClaude({
+      system: instruccion,
+      messages: ultimos,
+      model: MODEL_ROUTER,
+      maxTokens: 5,
+    });
+    if (status !== 200) return MODEL_EXPERTO;
+    const txt = (data.content || [])
+      .filter((x) => x.type === "text")
+      .map((x) => x.text)
+      .join(" ")
+      .toLowerCase();
+    return txt.includes("experto") ? MODEL_EXPERTO : MODEL_BARATO;
+  } catch {
+    return MODEL_EXPERTO;
+  }
 }
 
 export default async function handler(req, res) {
@@ -262,9 +303,12 @@ export default async function handler(req, res) {
     const ctx = { cineId };
     const convo = messages.slice();
 
+    // Router: elegimos el modelo según la dificultad del último mensaje.
+    const model = await elegirModelo(messages);
+
     // Loop de herramientas: sin tools, sale en la 1ª vuelta.
     for (let ronda = 0; ronda <= MAX_TOOL_ROUNDS; ronda++) {
-      const { status, data } = await llamarClaude({ system, messages: convo, tools });
+      const { status, data } = await llamarClaude({ system, messages: convo, tools, model });
       if (status !== 200) return res.status(status).json(data);
       if (data.stop_reason !== "tool_use") return res.status(200).json(data);
 
@@ -280,7 +324,7 @@ export default async function handler(req, res) {
     }
 
     // Se agotaron las rondas: respuesta final sin herramientas.
-    const { status, data } = await llamarClaude({ system, messages: convo });
+    const { status, data } = await llamarClaude({ system, messages: convo, model });
     return res.status(status).json(data);
   } catch (err) {
     console.error(err);
