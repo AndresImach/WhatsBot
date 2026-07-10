@@ -136,6 +136,24 @@ const TOOL_BUSCAR_PRODUCTO = {
   },
 };
 
+// Quita tildes y pasa a minúsculas para comparar texto de usuario contra el catálogo.
+// SQLite (y libSQL) foldea mayúsculas/minúsculas ASCII con LOWER(), pero NO acentos:
+// "AZÚCAR" no matchea LIKE '%azucar%'. Sin esto, cualquier búsqueda sin tilde (lo más
+// común escribiendo desde WhatsApp) falla en silencio y el modelo tiene que reintentar
+// con otro llamado completo — un round-trip entero (con todo el contexto reenviado)
+// solo para "buscar de nuevo lo mismo".
+function normalizarTexto(s) {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+// Mismo pliegue de acentos aplicado a la columna en SQL (no hay función unaccent nativa;
+// alcanza con las 6 vocales/ñ acentuadas del español). Solo envuelve nombres de columna
+// fijos, nunca input del usuario, así que es seguro concatenarlo directo en el SQL.
+const SQL_SIN_ACENTOS = (col) =>
+  `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(${col}),'á','a'),'é','e'),'í','i'),'ó','o'),'ú','u'),'ñ','n')`;
+
 // Límites bajos a propósito: cada resultado que devuelve esta tool se reenvía de nuevo
 // en las rondas siguientes del loop (y en el resto del turno), así que menos filas =
 // menos tokens repetidos. 5-8 alcanza para que el modelo elija u ofrezca alternativas.
@@ -145,23 +163,35 @@ async function ejecutarBuscarProducto(input) {
   const limite = Math.min(Math.max(Number(input?.limite) || 5, 1), 8);
   if (!texto && !categoria) return JSON.stringify({ error: "Indicá 'texto' o 'categoria' para buscar." });
   try {
-    let sql =
+    const palabras = texto ? normalizarTexto(texto).split(/\s+/).filter(Boolean).slice(0, 6) : [];
+    const catNorm = categoria ? normalizarTexto(categoria) : "";
+
+    const base =
       'SELECT p.id, p.name, p.price, p.available, c.name AS categoria ' +
       'FROM "Product" p JOIN "Category" c ON c.id = p.categoryId WHERE p.price > 0';
-    const args = [];
-    if (texto) {
-      for (const w of texto.split(/\s+/).slice(0, 6)) {
-        sql += " AND p.name LIKE ?";
-        args.push("%" + w + "%");
-      }
+    const condCategoria = categoria ? ` AND ${SQL_SIN_ACENTOS("c.name")} LIKE ?` : "";
+    const argsCategoria = categoria ? ["%" + catNorm + "%"] : [];
+
+    async function buscar(modo) {
+      // modo "AND": tienen que estar todas las palabras (más preciso). "OR": alcanza con una.
+      const condsPalabras = palabras.map(() => `${SQL_SIN_ACENTOS("p.name")} LIKE ?`);
+      const argsPalabras = palabras.map((w) => "%" + w + "%");
+      const condPalabras = condsPalabras.length
+        ? " AND (" + condsPalabras.join(modo === "AND" ? " AND " : " OR ") + ")"
+        : "";
+      const sql = base + condPalabras + condCategoria + " ORDER BY p.available DESC, p.price ASC LIMIT ?";
+      return turso(sql, [...argsPalabras, ...argsCategoria, limite]);
     }
-    if (categoria) {
-      sql += " AND c.name LIKE ?";
-      args.push("%" + categoria + "%");
+
+    // Primero exigimos todas las palabras (más preciso). Si no hay resultados y había
+    // más de una palabra, relajamos a "alguna palabra" ANTES de devolver vacío: una
+    // palabra de más (marca, cantidad, adjetivo) no debería tirar toda la búsqueda a
+    // cero y forzar al modelo a gastar otro llamado completo reintentando distinto.
+    let rows = await buscar("AND");
+    if (!rows.length && palabras.length > 1) {
+      rows = await buscar("OR");
     }
-    sql += " ORDER BY p.available DESC, p.price ASC LIMIT ?";
-    args.push(limite);
-    const rows = await turso(sql, args);
+
     const resultados = rows.map((r) => ({
       id: r.id,
       nombre: r.name,
