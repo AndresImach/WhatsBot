@@ -25,6 +25,7 @@ function negocioAtlas(nombre, cineId) {
     chips: ["¿Qué películas hay hoy?", "¿Cuánto sale la entrada?", "¿Cuándo estrena Spider-Man?", "¿Tienen funciones en 3D?"],
     agente: "cine",
     cineId,
+    derivacion: `Dame un segundo que te paso con una persona de ${nombre} 🙌`,
     promptBase: `Sos el asistente de WhatsApp de "${nombre}", en Tucumán, Argentina.
 
 TU TRABAJO: atender por WhatsApp a la gente que quiere ir al cine. Respondés cartelera, horarios, formatos (2D/3D), idioma (castellano/subtitulado), duración, precios y próximos estrenos. Español argentino, amable, breve y con onda. Emojis con moderación. Es WhatsApp: respuestas cortas.
@@ -67,6 +68,7 @@ const NEGOCIOS = {
     estado: "en línea · responde al instante",
     saludo: "¡Hola! 🎬 Bienvenido a Sunstar Cinemas Tucumán. ¿En qué te ayudo? Puedo pasarte la cartelera, horarios, promos o dónde comprar tus entradas.",
     chips: ["¿Qué películas hay hoy?", "Horarios de Toy Story 5", "¿Cómo funciona el 2x1?", "¿Dónde compro entradas?"],
+    derivacion: "Dame un segundo que te paso con una persona de Sunstar 🙌",
     prompt: `Sos el asistente de WhatsApp de "Sunstar Cinemas - Tucumán", en Argentina.
 
 TU TRABAJO: atender por WhatsApp a la gente que quiere ir al cine. Respondés cartelera, horarios, formatos (2D/3D), promociones y dónde comprar. Español argentino, amable, breve y con onda. Emojis con moderación. Es WhatsApp: respuestas cortas.
@@ -110,6 +112,7 @@ REGLAS:
     estado: "en línea · responde al instante",
     saludo: "¡Hola! 🍗 Bienvenido a Rotisería El Fuego. ¿Querés ver el menú, hacer un pedido o consultar horarios de entrega?",
     chips: ["¿Qué hay en el menú?", "¿Hacen delivery?", "Precio del pollo entero", "¿Hasta qué hora abren?"],
+    derivacion: "Uy, dame un segundo que te paso con alguien del local 🙌",
     prompt: `Sos el asistente de WhatsApp de "Rotisería El Fuego", en Argentina.
 
 TU TRABAJO: atender por WhatsApp a los clientes que quieren pedir comida. Respondés el menú, precios, delivery, horarios y tomás pedidos. Español argentino, amable, breve y con onda. Emojis con moderación. Es WhatsApp: respuestas cortas.
@@ -158,6 +161,7 @@ REGLAS:
     saludo: "¡Hola! 🧁 Bienvenido a Tobías Distribuciones, insumos de repostería. ¿Qué estás buscando? Puedo pasarte precios, buscarte productos, sugerirte alternativas o tomarte el pedido.",
     chips: ["¿Tenés chocolate cobertura?", "Precio de la harina 000", "Quiero hacer un pedido", "¿Dónde están los locales?"],
     agente: "tobias",
+    derivacion: "Dame un segundo que te paso con alguien de Tobías 🙌",
     prompt: `Sos el asistente de WhatsApp de "Tobías Distribuciones", un distribuidor de INSUMOS DE REPOSTERÍA en Argentina.
 
 TU TRABAJO: atender por WhatsApp a reposteros/as y clientes. Buscás productos y precios, sugerís alternativas y tomás pedidos. Español argentino, amable, claro y práctico. Emojis con moderación. Es WhatsApp: respuestas cortas y ordenadas.

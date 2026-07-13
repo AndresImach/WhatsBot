@@ -1,16 +1,6 @@
 import { responder } from "../lib/router.js";
 import { enviarTexto } from "../lib/whatsapp.js";
-
-// Historial de conversación en memoria (por número).
-// ⚠️ Se pierde cuando el servidor se reinicia. Para producción real conviene
-// usar un store persistente (Vercel KV / Upstash Redis). Alcanza para arrancar.
-const conversaciones = new Map();
-const MAX_TURNOS = 12;
-
-function getHistorial(numero) {
-  if (!conversaciones.has(numero)) conversaciones.set(numero, []);
-  return conversaciones.get(numero);
-}
+import { upsertConversacion, getConversacion, setEstado, agregarMensaje, historialParaModelo } from "../lib/db.js";
 
 export default async function handler(req, res) {
   // ── Verificación del webhook (Meta hace un GET al conectar) ──
@@ -38,25 +28,23 @@ export default async function handler(req, res) {
 
       const numero = msg.from;
       const texto = msg.text.body;
+      const nombreContacto = value?.contacts?.[0]?.profile?.name || null;
 
-      const historial = getHistorial(numero);
-      historial.push({ role: "user", content: texto });
+      await upsertConversacion(numero, nombreContacto);
+      await agregarMensaje(numero, "user", texto);
 
+      // Si una persona ya está atendiendo esta conversación desde el backoffice,
+      // el bot no contesta: solo queda registrado el mensaje para que lo vea ahí.
+      const conv = await getConversacion(numero);
+      if (conv?.estado === "humano") return;
+
+      const historial = await historialParaModelo(numero);
       const { texto: respuesta, derivar } = await responder(historial);
 
-      historial.push({ role: "assistant", content: respuesta });
-      // Recortar historial para que no crezca infinito
-      if (historial.length > MAX_TURNOS) {
-        conversaciones.set(numero, historial.slice(-MAX_TURNOS));
-      }
+      await agregarMensaje(numero, "assistant", respuesta);
+      if (derivar) await setEstado(numero, "humano");
 
       await enviarTexto(numero, respuesta);
-
-      // (Opcional) avisar al dueño cuando el bot deriva a un humano
-      // if (derivar && process.env.OWNER_PHONE) {
-      //   await enviarTexto(process.env.OWNER_PHONE,
-      //     `🔔 El bot derivó una conversación. Cliente: ${numero}`);
-      // }
     } catch (e) {
       console.error("Error procesando mensaje:", e);
     }

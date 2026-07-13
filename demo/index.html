@@ -325,6 +325,35 @@
       return _systemPromise;
     }
 
+    // Cuando el clasificador deriva a una persona (o la conversación ya estaba
+    // en manos de una persona desde el backoffice), el server no genera más
+    // respuestas: este polling es lo que le muestra al widget lo que la
+    // persona va escribiendo desde /backoffice.html, y detecta cuándo vuelve
+    // a quedar en manos del bot.
+    let cursorId = 0;
+    let poll = null;
+    function empezarPoll() {
+      if (poll) return;
+      document.getElementById('st').textContent = 'esperando a una persona…';
+      poll = setInterval(async () => {
+        try {
+          const r = await fetch(`/api/poll?convId=${CONV_ID}&desde=${cursorId}`);
+          const d = await r.json();
+          (d.mensajes || []).forEach((m) => {
+            cursorId = Math.max(cursorId, m.id);
+            if (m.rol === 'humano') {
+              burbuja(m.contenido, 'in');
+              history.push({ role: 'assistant', content: m.contenido });
+            }
+          });
+          if (d.estado === 'bot') {
+            clearInterval(poll); poll = null;
+            document.getElementById('st').textContent = NEGOCIO.estado;
+          }
+        } catch (e) {}
+      }, 3000);
+    }
+
     async function responder() {
       typing(true);
       try {
@@ -336,14 +365,25 @@
             agente: NEGOCIO.agente, // 'cine' | 'tobias' | undefined → habilita herramientas en el server
             cineId: NEGOCIO.cineId,
             convId: CONV_ID,
-            negocio: NEGOCIO_SLUG
+            negocio: NEGOCIO_SLUG,
+            derivacion: NEGOCIO.derivacion
           })
         });
         const data = await r.json();
-        const txt = (data.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n') || "Perdón, no pude responder. ¿Lo repetís?";
         typing(false);
+        if (data.paused) {
+          // Ya la está atendiendo una persona: no hay respuesta nueva del bot.
+          cursorId = Math.max(cursorId, data.ultimoId || 0);
+          empezarPoll();
+          return;
+        }
+        const txt = (data.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n') || "Perdón, no pude responder. ¿Lo repetís?";
         burbuja(txt, 'in');
         history.push({ role: 'assistant', content: txt });
+        if (data.derivar) {
+          cursorId = Math.max(cursorId, data.ultimoId || 0);
+          empezarPoll();
+        }
       } catch (e) {
         typing(false);
         burbuja("⚠️ No me pude conectar. (En la demo real esto anda por el servidor.)", 'in');

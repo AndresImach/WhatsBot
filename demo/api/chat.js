@@ -28,7 +28,16 @@
 //   Para Tobías: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN (catálogo/pedidos reales)
 //   Para el registro de conversaciones del demo (base APARTE, no la de Tobías):
 //     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
+import { upsertConversacion, getConversacion, setEstado, agregarMensaje } from "../lib/db.js";
+
 const CINE_API = "https://apiv2.gaf.adro.studio";
+// Mensaje por defecto cuando se deriva a una persona y el negocio (negocios.js)
+// no mandó uno propio en "derivacion".
+const DERIVACION_DEFAULT = "Dame un segundo que te paso con una persona 🙌";
+// La persistencia de conversaciones (pivot a humano + backoffice) usa la misma
+// base LOG_TURSO de los logs de costo. Si no está configurada, el demo sigue
+// funcionando exactamente como antes (sin pausa ni backoffice).
+const persistenciaActiva = () => !!process.env.LOG_TURSO_DATABASE_URL;
 // Router de 2 capas: un clasificador barato decide quién atiende cada mensaje.
 //   - MODEL_BARATO: atiende lo simple (catálogo, precios, horarios, pedidos normales). ~85%.
 //   - MODEL_EXPERTO: solo lo que pide criterio (reclamos, pagos/entregas, temas delicados,
@@ -465,21 +474,23 @@ async function llamarClaude({ system, messages, tools, model, maxTokens, cache =
   return { status: r.status, data: await r.json() };
 }
 
-// Router: clasifica el último mensaje del cliente y elige el modelo que lo atiende.
+// Router: clasifica el último mensaje del cliente en 3 categorías.
 // Corre en el modelo barato mirando solo los últimos turnos (texto), así cuesta muy poco.
-// Ante cualquier duda o error, escala al modelo experto (prioriza calidad sobre costo).
-async function elegirModelo(messages) {
+// Ante cualquier duda o error, escala al modelo experto (prioriza calidad sobre costo);
+// 'derivar' solo se usa cuando hace explícitamente falta una persona (nunca por duda).
+async function clasificar(messages) {
   const ultimos = (messages || [])
     .slice(-6)
     .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "" }))
     .filter((m) => m.content);
-  if (!ultimos.length) return { model: MODEL_BARATO, usage: {} };
+  if (!ultimos.length) return { categoria: "simple", usage: {} };
 
   const instruccion =
-    "Sos un clasificador. Mirá el ÚLTIMO mensaje del cliente en esta conversación y decidí quién debe atenderlo:\n" +
+    "Sos un clasificador. Mirá el ÚLTIMO mensaje del cliente en esta conversación y decidí la categoría:\n" +
     "- 'simple': consultas de información, catálogo, productos, precios, horarios, cartelera, disponibilidad, o un pedido/compra normal, saludos y charla común.\n" +
-    "- 'experto': reclamos o quejas, un problema con un pago, compra o entrega, temas delicados o sensibles, pedidos de hablar con una persona, o situaciones ambiguas que requieran criterio.\n" +
-    "Respondé SOLO con una palabra, en minúscula: simple o experto.";
+    "- 'experto': temas delicados o sensibles, o situaciones ambiguas que requieran criterio, pero que el negocio puede seguir resolviendo él mismo.\n" +
+    "- 'derivar': una queja o reclamo, un problema con un pago/compra/entrega, o un pedido EXPLÍCITO de hablar con una persona.\n" +
+    "Respondé SOLO con una palabra, en minúscula: simple, experto o derivar.";
   try {
     const { status, data } = await llamarClaude({
       system: instruccion,
@@ -487,16 +498,16 @@ async function elegirModelo(messages) {
       model: MODEL_ROUTER,
       maxTokens: 5,
     });
-    if (status !== 200) return { model: MODEL_EXPERTO, usage: {} };
+    if (status !== 200) return { categoria: "experto", usage: {} };
     const txt = (data.content || [])
       .filter((x) => x.type === "text")
       .map((x) => x.text)
       .join(" ")
       .toLowerCase();
-    const model = txt.includes("experto") ? MODEL_EXPERTO : MODEL_BARATO;
-    return { model, usage: data.usage || {} };
+    const categoria = txt.includes("derivar") ? "derivar" : txt.includes("experto") ? "experto" : "simple";
+    return { categoria, usage: data.usage || {} };
   } catch {
-    return { model: MODEL_EXPERTO, usage: {} };
+    return { categoria: "experto", usage: {} };
   }
 }
 
@@ -579,17 +590,66 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
   try {
-    const { system, messages, agente, cineId, convId, negocio } = req.body || {};
+    const { system, messages, agente, cineId, convId, negocio, derivacion } = req.body || {};
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "messages es requerido" });
+    }
+
+    // Persistencia + pivot a humano: guardamos el mensaje del cliente y nos
+    // fijamos si esta conversación ya la tomó una persona desde el backoffice.
+    // Si no hay LOG_TURSO configurada, esto se salta entero y el demo se
+    // comporta exactamente como antes (sin pausa ni backoffice).
+    let conv = null;
+    let ultimoId = null;
+    if (convId && persistenciaActiva()) {
+      try {
+        await upsertConversacion(convId, negocio);
+        ultimoId = await agregarMensaje(convId, "user", ultimoMensajeUsuario(messages));
+        conv = await getConversacion(convId);
+      } catch (e) {
+        console.error("db:", e.message);
+      }
+    }
+    if (conv?.estado === "humano") {
+      // Una persona ya está atendiendo: no contesta el bot, solo queda registrado.
+      return res.status(200).json({ paused: true, ultimoId });
     }
 
     const tools = toolsPara(agente, cineId);
     const ctx = { cineId };
     const convo = podarHistorial(messages);
 
-    // Router: elegimos el modelo según la dificultad del último mensaje.
-    const { model, usage: routerUsage } = await elegirModelo(messages);
+    // Router: elegimos la categoría del último mensaje (y con ella, el modelo).
+    const { categoria, usage: routerUsage } = await clasificar(messages);
+
+    if (categoria === "derivar") {
+      // No hace falta gastar en el modelo principal: derivamos directo,
+      // igual que haría el bot real (bot/lib/router.js) ante un "derivar".
+      const texto = derivacion || DERIVACION_DEFAULT;
+      if (convId && persistenciaActiva()) {
+        try {
+          await setEstado(convId, "humano");
+          ultimoId = await agregarMensaje(convId, "assistant", texto);
+        } catch (e) {
+          console.error("db:", e.message);
+        }
+      }
+      registrarLog({
+        convId,
+        negocio,
+        agente,
+        model: "derivar",
+        userMsg: ultimoMensajeUsuario(messages),
+        botMsg: texto,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        costUsd: Math.round(costoUsd(MODEL_ROUTER, routerUsage) * 1e6) / 1e6,
+      });
+      return res.status(200).json({ content: [{ type: "text", text: texto }], derivar: true, ultimoId });
+    }
+
+    const model = categoria === "experto" ? MODEL_EXPERTO : MODEL_BARATO;
 
     // Acumulamos el consumo del handler a lo largo del loop para el log de costos.
     const handlerUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
@@ -625,6 +685,14 @@ export default async function handler(req, res) {
       sumarUsage(handlerUsage, data.usage);
       finalData = data;
       finalStatus = status;
+    }
+
+    if (convId && persistenciaActiva()) {
+      try {
+        await agregarMensaje(convId, "assistant", textoDe(finalData.content));
+      } catch (e) {
+        console.error("db:", e.message);
+      }
     }
 
     // Registro del turno (costo = handler + router). No bloquea la respuesta.

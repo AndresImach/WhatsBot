@@ -39,6 +39,25 @@ y ya tenés la demo del rubro que quieras, en 2 minutos.
 > Nota: el archivo `demo-en-vivo.html` (fuera de esta carpeta) es una versión que
 > corre sola dentro de Claude.ai para probar. La que llevás a los clientes es esta.
 
+### Pivot a humano + backoffice (mostrárselo al cliente en la reunión)
+
+La demo simula el mismo "derivar a una persona" que hace el bot real
+(`bot/lib/router.js`): un clasificador barato mira cada mensaje y, si es una
+queja, un problema de pago/entrega o un pedido explícito de hablar con
+alguien, el bot dice su frase de derivación (configurable por negocio en
+`negocios.js`, campo `derivacion`) y dejar de contestar esa conversación.
+
+`demo/backoffice.html` es donde el cliente ve esas conversaciones y responde a
+mano — el widget del demo (`index.html`) hace polling y muestra la respuesta
+como si fuera un mensaje entrante, y con "Devolver al bot" la conversación
+vuelve a quedar en piloto automático.
+
+- Necesita: `LOG_TURSO_DATABASE_URL` / `LOG_TURSO_AUTH_TOKEN` (correr
+  `demo/schema.sql` una vez ahí) y `BACKOFFICE_PASSWORD` / `BACKOFFICE_SESSION_SECRET`.
+- Sin esas env vars, el demo sigue funcionando exactamente igual, solo que sin
+  la pausa ni el backoffice (se comporta como antes).
+- URL: `https://tu-proyecto.vercel.app/backoffice`.
+
 ---
 
 ## 3. bot/ — el chatbot que vendés
@@ -63,7 +82,8 @@ Recibe los mensajes de verdad y responde solo.
 **A. Deploy en Vercel**
 1. Importás la carpeta `bot/` en Vercel.
 2. Cargás las Environment Variables (ver `.env.example`):
-   `ANTHROPIC_API_KEY`, `WHATSAPP_TOKEN`, `PHONE_NUMBER_ID`, `VERIFY_TOKEN`.
+   `ANTHROPIC_API_KEY`, `WHATSAPP_TOKEN`, `PHONE_NUMBER_ID`, `VERIFY_TOKEN`,
+   `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `BACKOFFICE_PASSWORD`, `BACKOFFICE_SESSION_SECRET`.
    El `VERIFY_TOKEN` es una palabra secreta que inventás vos.
 3. Deploy. Tu webhook queda en `https://tu-proyecto.vercel.app/api/webhook`.
 
@@ -87,9 +107,31 @@ Recibe los mensajes de verdad y responde solo.
 
 ### Historial de conversación
 
-Por ahora el historial vive en memoria y se borra si el servidor se reinicia.
-Para un negocio con volumen conviene un store persistente (Vercel KV / Upstash Redis).
-Está marcado en `api/webhook.js`.
+El historial y el estado de cada conversación viven en una base de Turso (libSQL),
+no en memoria. Antes de deployar, creá la base y corré el esquema una sola vez:
+
+```bash
+turso db create tu-bot          # o usá una que ya tengas
+turso db shell tu-bot < bot/schema.sql
+turso db show tu-bot --url      # → TURSO_DATABASE_URL
+turso db tokens create tu-bot   # → TURSO_AUTH_TOKEN
+```
+
+### Backoffice — atender a mano las conversaciones que el bot derivó
+
+Cuando el clasificador decide `derivar` (queja, reclamo, pedido de hablar con
+una persona, algo delicado), el bot **deja de contestarle a ese número** y la
+conversación queda marcada como `humano` hasta que alguien la resuelve.
+
+`bot/backoffice.html` es la pantalla para eso: entrando con `BACKOFFICE_PASSWORD`
+se ve la lista de conversaciones que necesitan una persona (con el hilo completo
+de mensajes), se puede responder directamente por WhatsApp desde ahí, y con
+"Devolver al bot" la conversación vuelve a ser atendida automáticamente.
+
+- URL: `https://tu-proyecto.vercel.app/backoffice`
+- Config: `BACKOFFICE_PASSWORD` (la contraseña) y `BACKOFFICE_SESSION_SECRET`
+  (string random para firmar la sesión, ej. `openssl rand -hex 32`).
+- Se actualiza sola cada pocos segundos (polling simple, sin websockets).
 
 ---
 
