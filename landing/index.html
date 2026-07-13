@@ -1,486 +1,1308 @@
 <!DOCTYPE html>
 <html lang="es-AR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tu negocio responde solo — chatbots de WhatsApp</title>
-<meta name="description" content="Instalo chatbots en el WhatsApp de tu negocio. Responden solos, las 24 horas, para que no pierdas ni un cliente por no contestar a tiempo.">
 
-<!-- ═══════════════════════════════════════════════════════════════
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tu negocio responde solo — chatbots de WhatsApp</title>
+  <meta name="description"
+    content="Instalo chatbots en el WhatsApp de tu negocio. Responden solos, las 24 horas, para que no pierdas ni un cliente por no contestar a tiempo.">
+
+  <!-- ═══════════════════════════════════════════════════════════════
      👇 EDITÁ ESTO (lo único que tenés que tocar para salir a vender)
      ═══════════════════════════════════════════════════════════════ -->
-<script>
-const CONFIG = {
-  marca:            "TuMarca",                 // tu nombre comercial
-  telWhatsApp:      "5493810000000",           // tu WhatsApp, sin + ni espacios (cód. país + área)
-  ciudad:           "Tucumán",                 // dónde estás / a quién le vendés
-  emailContacto:    "hola@tumarca.com",        // opcional, podés borrarlo
-  demoUrl:          "#demo",                    // pegá acá la URL de tu demo deployada
-  // Precio de ejemplo — cambialo o borrá la sección de precios entera
-  precioSetup:      "$—",
-  precioMensual:    "$—/mes",
-};
-</script>
+  <script>
+    const CONFIG = {
+      marca: "ChatNoa",                 // tu nombre comercial
+      telWhatsApp: "5493815131450",           // tu WhatsApp, sin + ni espacios (cód. país + área)
+      ciudad: "Tucumán",                 // dónde estás / a quién le vendés
+      emailContacto: "andresimach@gmail.com",        // opcional, podés borrarlo
+      demoUrl: "https://whats-bot.vercel.app/menu",                    // pegá acá la URL de tu demo deployada
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+      // Precios ancla — el de entrada (datos simples, bajo volumen). Charges reales
+      // según banda de volumen y complejidad se definen en la reunión, no acá.
+      precioSetup: "US$80",       // setup Simple (datos estáticos: carta, horarios, FAQs)
+      precioSetupNota: "Con conexión a stock o pedidos en vivo: US$120–200",
+      precioMensual: "Desde US$45/mes",
+      precioMensualNota: "Según cuánto te escriben tus clientes por mes",
+    };
+  </script>
 
-<style>
-:root{
-  --paper:#F5F6F3;
-  --paper-2:#ECEFE9;
-  --ink:#0E2A21;
-  --ink-soft:#2C4238;
-  --muted:#5C6B63;
-  --green:#1FA855;
-  --green-bright:#25D366;
-  --amber:#E8912B;
-  --line:rgba(14,42,33,.12);
-  --line-soft:rgba(14,42,33,.07);
-  --radius:18px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{
-  font-family:'Inter',system-ui,sans-serif;
-  background:var(--paper);
-  color:var(--ink);
-  line-height:1.55;
-  -webkit-font-smoothing:antialiased;
-  overflow-x:hidden;
-}
-h1,h2,h3,.display{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;line-height:1.02}
-a{color:inherit;text-decoration:none}
-.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-.eyebrow{
-  font-size:.78rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--green);display:inline-flex;align-items:center;gap:8px;
-}
-.eyebrow::before{content:"";width:24px;height:1.5px;background:var(--green)}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet">
 
-/* botones */
-.btn{
-  display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:1rem;
-  padding:15px 26px;border-radius:999px;border:1.5px solid transparent;cursor:pointer;
-  transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
-}
-.btn-primary{background:var(--green-bright);color:#062b16;box-shadow:0 8px 22px rgba(31,168,85,.28)}
-.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(31,168,85,.38)}
-.btn-ghost{background:transparent;color:var(--ink);border-color:var(--line)}
-.btn-ghost:hover{border-color:var(--ink);transform:translateY(-2px)}
-.btn svg{width:20px;height:20px}
+  <style>
+    :root {
+      --paper: #F5F6F3;
+      --paper-2: #ECEFE9;
+      --ink: #0E2A21;
+      --ink-soft: #2C4238;
+      --muted: #5C6B63;
+      --green: #1FA855;
+      --green-bright: #25D366;
+      --amber: #E8912B;
+      --line: rgba(14, 42, 33, .12);
+      --line-soft: rgba(14, 42, 33, .07);
+      --radius: 18px;
+    }
 
-/* nav */
-nav{position:sticky;top:0;z-index:50;background:rgba(245,246,243,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line-soft)}
-.nav-in{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1120px;margin:0 auto}
-.logo{font-family:'Bricolage Grotesque';font-weight:800;font-size:1.3rem;display:flex;align-items:center;gap:9px}
-.logo .dot{width:11px;height:11px;border-radius:50%;background:var(--green-bright);box-shadow:0 0 0 4px rgba(37,211,102,.2)}
-.nav-cta{font-weight:600;font-size:.95rem;display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;background:var(--ink);color:var(--paper)}
-.nav-links{display:flex;gap:28px;font-size:.95rem;color:var(--ink-soft)}
-.nav-links a:hover{color:var(--green)}
-@media(max-width:820px){.nav-links{display:none}}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
 
-/* ─── HERO ─── */
-.hero{padding:74px 0 90px;position:relative}
-.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
-.hero h1{font-size:clamp(2.6rem,5.4vw,4.2rem);font-weight:700;margin:22px 0 20px}
-.hero h1 .hl{color:var(--green);position:relative;white-space:nowrap}
-.hero .lede{font-size:1.22rem;color:var(--ink-soft);max-width:34ch;margin-bottom:34px}
-.hero-cta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-.trust{margin-top:26px;font-size:.92rem;color:var(--muted);display:flex;align-items:center;gap:10px}
-.trust b{color:var(--ink)}
-@media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:44px}.hero{padding:48px 0 64px}}
+    html {
+      scroll-behavior: smooth
+    }
 
-/* phone mock / chat signature */
-.phone{
-  width:100%;max-width:360px;margin:0 auto;background:#0b141a;border-radius:34px;padding:12px;
-  box-shadow:0 30px 70px -20px rgba(14,42,33,.5), 0 0 0 1px rgba(255,255,255,.04);
-  position:relative;
-}
-.phone-screen{background:#0b141a;border-radius:24px;overflow:hidden}
-.wa-bar{background:#1f2c34;padding:14px 16px;display:flex;align-items:center;gap:12px;color:#e9edef}
-.wa-av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--green),#0e6b3a);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-family:'Bricolage Grotesque'}
-.wa-name{font-weight:600;font-size:.95rem}
-.wa-status{font-size:.72rem;color:#8aa0ad}
-.wa-body{
-  background:#0b141a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h1v1H0z' fill='%23131f27'/%3E%3C/svg%3E");
-  padding:16px 12px;height:496px;overflow:hidden;display:flex;flex-direction:column;gap:9px;justify-content:flex-end;
-}
-.bub{max-width:82%;padding:8px 11px;border-radius:9px;font-size:.9rem;line-height:1.4;opacity:0;transform:translateY(8px);animation:pop .4s forwards}
-.bub .t{display:block;font-size:.62rem;text-align:right;margin-top:3px;opacity:.6}
-.bub.in{background:#1f2c34;color:#e9edef;align-self:flex-start;border-top-left-radius:2px}
-.bub.out{background:#005c4b;color:#e9edef;align-self:flex-end;border-top-right-radius:2px}
-@keyframes pop{to{opacity:1;transform:translateY(0)}}
-.typing{align-self:flex-start;background:#1f2c34;padding:11px 14px;border-radius:9px;display:flex;gap:4px;opacity:0;animation:pop .3s forwards}
-.typing span{width:6px;height:6px;border-radius:50%;background:#8aa0ad;animation:blink 1.2s infinite}
-.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
-@keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
 
-/* ─── strip / logos de rubros ─── */
-.strip{border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);background:var(--paper-2)}
-.strip-in{padding:22px 24px;display:flex;align-items:center;gap:34px;flex-wrap:wrap;justify-content:center;max-width:1120px;margin:0 auto}
-.strip-in span{font-size:.9rem;color:var(--muted)}
-.strip-in b{color:var(--ink-soft);font-weight:600}
+    h1,
+    h2,
+    h3,
+    .display {
+      font-family: 'Bricolage Grotesque', sans-serif;
+      letter-spacing: -.02em;
+      line-height: 1.02
+    }
 
-/* ─── secciones ─── */
-section{padding:88px 0}
-.sec-head{max-width:640px;margin-bottom:52px}
-.sec-head h2{font-size:clamp(1.9rem,3.6vw,2.9rem);font-weight:700;margin:16px 0 14px}
-.sec-head p{font-size:1.12rem;color:var(--ink-soft)}
+    a {
+      color: inherit;
+      text-decoration: none
+    }
 
-/* problema */
-.problem{background:var(--ink);color:var(--paper)}
-.problem .eyebrow{color:var(--green-bright)}
-.problem .eyebrow::before{background:var(--green-bright)}
-.problem h2{color:var(--paper)}
-.problem .sec-head p{color:#b9c9c0}
-.loss-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.loss{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);padding:28px}
-.loss .n{font-family:'Bricolage Grotesque';font-size:2.4rem;font-weight:800;color:var(--green-bright);line-height:1}
-.loss p{margin-top:12px;color:#c7d5cd;font-size:.98rem}
-@media(max-width:760px){.loss-grid{grid-template-columns:1fr}}
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px
+    }
 
-/* cómo funciona */
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-.step{padding:30px;border:1px solid var(--line);border-radius:var(--radius);background:#fff}
-.step-n{font-family:'Bricolage Grotesque';font-weight:800;font-size:1rem;color:var(--green);border:1.5px solid var(--green);width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
-.step h3{font-size:1.25rem;font-weight:700;margin-bottom:8px}
-.step p{color:var(--ink-soft);font-size:.98rem}
-@media(max-width:760px){.steps{grid-template-columns:1fr}}
+    .eyebrow {
+      font-size: .78rem;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--green);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-/* qué hace — lista */
-.does{display:grid;grid-template-columns:1fr 1fr;gap:16px 44px}
-.does li{list-style:none;display:flex;gap:14px;padding:16px 0;border-bottom:1px solid var(--line-soft);align-items:flex-start}
-.does .ck{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:rgba(31,168,85,.14);color:var(--green);display:flex;align-items:center;justify-content:center;font-weight:700;margin-top:2px}
-.does b{font-weight:600}
-.does p{font-size:.94rem;color:var(--muted);margin-top:2px}
-@media(max-width:700px){.does{grid-template-columns:1fr}}
+    .eyebrow::before {
+      content: "";
+      width: 24px;
+      height: 1.5px;
+      background: var(--green)
+    }
 
-/* diferenciador */
-.why{background:var(--paper-2)}
-.why-grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
-.why-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:8px}
-.why-card .row{display:flex;gap:14px;padding:20px;align-items:flex-start;border-bottom:1px solid var(--line-soft)}
-.why-card .row:last-child{border-bottom:none}
-.why-card .ic{font-size:1.4rem}
-.why-card b{display:block;font-weight:600;margin-bottom:3px}
-.why-card span{font-size:.94rem;color:var(--muted)}
-.why h2{margin-bottom:18px}
-.why ul{margin:22px 0 0;padding:0}
-.why li{list-style:none;padding:9px 0;color:var(--ink-soft);display:flex;gap:12px}
-.why li::before{content:"✓";color:var(--green);font-weight:800}
-@media(max-width:820px){.why-grid{grid-template-columns:1fr;gap:36px}}
+    /* botones */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 15px 26px;
+      border-radius: 999px;
+      border: 1.5px solid transparent;
+      cursor: pointer;
+      transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+    }
 
-/* demo */
-.demo{text-align:center;background:var(--ink);color:var(--paper)}
-.demo h2{color:var(--paper);font-size:clamp(2rem,4vw,3.1rem);max-width:18ch;margin:16px auto 18px}
-.demo p{color:#b9c9c0;font-size:1.15rem;max-width:46ch;margin:0 auto 34px}
-.demo .eyebrow{color:var(--green-bright);justify-content:center;display:flex}
-.demo .eyebrow::before{background:var(--green-bright)}
+    .btn-primary {
+      background: var(--green-bright);
+      color: #062b16;
+      box-shadow: 0 8px 22px rgba(31, 168, 85, .28)
+    }
 
-/* precios */
-.price-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:820px}
-.plan{border:1px solid var(--line);border-radius:var(--radius);padding:34px;background:#fff}
-.plan.feat{border:1.5px solid var(--green);position:relative;box-shadow:0 16px 40px -18px rgba(31,168,85,.4)}
-.plan .tag{position:absolute;top:-13px;left:34px;background:var(--green-bright);color:#062b16;font-size:.72rem;font-weight:700;padding:5px 12px;border-radius:999px;letter-spacing:.04em}
-.plan h3{font-size:1.35rem;font-weight:700}
-.plan .amt{font-family:'Bricolage Grotesque';font-size:2.6rem;font-weight:800;margin:14px 0 4px}
-.plan .amt small{font-size:1rem;font-weight:500;color:var(--muted)}
-.plan .sub{color:var(--muted);font-size:.95rem;margin-bottom:20px}
-.plan ul{list-style:none;margin:20px 0 26px}
-.plan li{padding:8px 0;color:var(--ink-soft);display:flex;gap:10px;font-size:.96rem}
-.plan li::before{content:"✓";color:var(--green);font-weight:800}
-.plan .btn{width:100%;justify-content:center}
-@media(max-width:700px){.price-grid{grid-template-columns:1fr}}
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(31, 168, 85, .38)
+    }
 
-/* faq */
-.faq details{border-bottom:1px solid var(--line);padding:6px 0}
-.faq summary{cursor:pointer;list-style:none;padding:20px 0;font-weight:600;font-size:1.12rem;display:flex;justify-content:space-between;align-items:center;gap:20px}
-.faq summary::-webkit-details-marker{display:none}
-.faq summary::after{content:"+";font-size:1.5rem;color:var(--green);transition:transform .2s;font-weight:400}
-.faq details[open] summary::after{transform:rotate(45deg)}
-.faq p{padding:0 0 22px;color:var(--ink-soft);max-width:70ch}
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink);
+      border-color: var(--line)
+    }
 
-/* cierre */
-.close{text-align:center;background:linear-gradient(160deg,var(--green) 0%,#0e6b3a 100%);color:#fff}
-.close h2{color:#fff;font-size:clamp(2.1rem,4.4vw,3.3rem);max-width:20ch;margin:0 auto 20px}
-.close p{color:rgba(255,255,255,.85);font-size:1.18rem;margin-bottom:32px}
-.close .btn-primary{background:#fff;color:#0e6b3a}
-.close .btn-ghost{border-color:rgba(255,255,255,.4);color:#fff}
-.close .btn-ghost:hover{border-color:#fff;background:rgba(255,255,255,.1)}
+    .btn-ghost:hover {
+      border-color: var(--ink);
+      transform: translateY(-2px)
+    }
 
-footer{padding:44px 0;border-top:1px solid var(--line-soft);color:var(--muted);font-size:.9rem}
-.foot-in{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+    .btn svg {
+      width: 20px;
+      height: 20px
+    }
 
-.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
-.reveal.in{opacity:1;transform:none}
-@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.bub,.typing{animation:none;opacity:1;transform:none}}
-:focus-visible{outline:3px solid var(--green);outline-offset:3px;border-radius:6px}
-</style>
+    /* nav */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(245, 246, 243, .82);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line-soft)
+    }
+
+    .nav-in {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      max-width: 1120px;
+      margin: 0 auto
+    }
+
+    .logo {
+      font-family: 'Bricolage Grotesque';
+      font-weight: 800;
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 9px
+    }
+
+    .logo .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--green-bright);
+      box-shadow: 0 0 0 4px rgba(37, 211, 102, .2)
+    }
+
+    .nav-cta {
+      font-weight: 600;
+      font-size: .95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--paper)
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      font-size: .95rem;
+      color: var(--ink-soft)
+    }
+
+    .nav-links a:hover {
+      color: var(--green)
+    }
+
+    @media(max-width:820px) {
+      .nav-links {
+        display: none
+      }
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      padding: 74px 0 90px;
+      position: relative
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 56px;
+      align-items: center
+    }
+
+    .hero h1 {
+      font-size: clamp(2.6rem, 5.4vw, 4.2rem);
+      font-weight: 700;
+      margin: 22px 0 20px
+    }
+
+    .hero h1 .hl {
+      color: var(--green);
+      position: relative;
+      white-space: nowrap
+    }
+
+    .hero .lede {
+      font-size: 1.22rem;
+      color: var(--ink-soft);
+      max-width: 34ch;
+      margin-bottom: 34px
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    .trust {
+      margin-top: 26px;
+      font-size: .92rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .trust b {
+      color: var(--ink)
+    }
+
+    @media(max-width:900px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+        gap: 44px
+      }
+
+      .hero {
+        padding: 48px 0 64px
+      }
+    }
+
+    /* phone mock / chat signature */
+    .phone {
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      background: #0b141a;
+      border-radius: 34px;
+      padding: 12px;
+      box-shadow: 0 30px 70px -20px rgba(14, 42, 33, .5), 0 0 0 1px rgba(255, 255, 255, .04);
+      position: relative;
+    }
+
+    .phone-screen {
+      background: #0b141a;
+      border-radius: 24px;
+      overflow: hidden
+    }
+
+    .wa-bar {
+      background: #1f2c34;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #e9edef
+    }
+
+    .wa-av {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--green), #0e6b3a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #fff;
+      font-family: 'Bricolage Grotesque'
+    }
+
+    .wa-name {
+      font-weight: 600;
+      font-size: .95rem
+    }
+
+    .wa-status {
+      font-size: .72rem;
+      color: #8aa0ad
+    }
+
+    .wa-body {
+      background: #0b141a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h1v1H0z' fill='%23131f27'/%3E%3C/svg%3E");
+      padding: 16px 12px;
+      height: 496px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      justify-content: flex-end;
+    }
+
+    .bub {
+      max-width: 82%;
+      padding: 8px 11px;
+      border-radius: 9px;
+      font-size: .9rem;
+      line-height: 1.4;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: pop .4s forwards
+    }
+
+    .bub .t {
+      display: block;
+      font-size: .62rem;
+      text-align: right;
+      margin-top: 3px;
+      opacity: .6
+    }
+
+    .bub.in {
+      background: #1f2c34;
+      color: #e9edef;
+      align-self: flex-start;
+      border-top-left-radius: 2px
+    }
+
+    .bub.out {
+      background: #005c4b;
+      color: #e9edef;
+      align-self: flex-end;
+      border-top-right-radius: 2px
+    }
+
+    @keyframes pop {
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .typing {
+      align-self: flex-start;
+      background: #1f2c34;
+      padding: 11px 14px;
+      border-radius: 9px;
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      animation: pop .3s forwards
+    }
+
+    .typing span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #8aa0ad;
+      animation: blink 1.2s infinite
+    }
+
+    .typing span:nth-child(2) {
+      animation-delay: .2s
+    }
+
+    .typing span:nth-child(3) {
+      animation-delay: .4s
+    }
+
+    @keyframes blink {
+
+      0%,
+      60%,
+      100% {
+        opacity: .3
+      }
+
+      30% {
+        opacity: 1
+      }
+    }
+
+    /* ─── strip / logos de rubros ─── */
+    .strip {
+      border-top: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      background: var(--paper-2)
+    }
+
+    .strip-in {
+      padding: 22px 24px;
+      display: flex;
+      align-items: center;
+      gap: 34px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 1120px;
+      margin: 0 auto
+    }
+
+    .strip-in span {
+      font-size: .9rem;
+      color: var(--muted)
+    }
+
+    .strip-in b {
+      color: var(--ink-soft);
+      font-weight: 600
+    }
+
+    /* ─── secciones ─── */
+    section {
+      padding: 88px 0
+    }
+
+    .sec-head {
+      max-width: 640px;
+      margin-bottom: 52px
+    }
+
+    .sec-head h2 {
+      font-size: clamp(1.9rem, 3.6vw, 2.9rem);
+      font-weight: 700;
+      margin: 16px 0 14px
+    }
+
+    .sec-head p {
+      font-size: 1.12rem;
+      color: var(--ink-soft)
+    }
+
+    /* problema */
+    .problem {
+      background: var(--ink);
+      color: var(--paper)
+    }
+
+    .problem .eyebrow {
+      color: var(--green-bright)
+    }
+
+    .problem .eyebrow::before {
+      background: var(--green-bright)
+    }
+
+    .problem h2 {
+      color: var(--paper)
+    }
+
+    .problem .sec-head p {
+      color: #b9c9c0
+    }
+
+    .loss-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px
+    }
+
+    .loss {
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: var(--radius);
+      padding: 28px
+    }
+
+    .loss .n {
+      font-family: 'Bricolage Grotesque';
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: var(--green-bright);
+      line-height: 1
+    }
+
+    .loss p {
+      margin-top: 12px;
+      color: #c7d5cd;
+      font-size: .98rem
+    }
+
+    @media(max-width:760px) {
+      .loss-grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* cómo funciona */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px
+    }
+
+    .step {
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff
+    }
+
+    .step-n {
+      font-family: 'Bricolage Grotesque';
+      font-weight: 800;
+      font-size: 1rem;
+      color: var(--green);
+      border: 1.5px solid var(--green);
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px
+    }
+
+    .step h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 8px
+    }
+
+    .step p {
+      color: var(--ink-soft);
+      font-size: .98rem
+    }
+
+    @media(max-width:760px) {
+      .steps {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* qué hace — lista */
+    .does {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 44px
+    }
+
+    .does li {
+      list-style: none;
+      display: flex;
+      gap: 14px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line-soft);
+      align-items: flex-start
+    }
+
+    .does .ck {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(31, 168, 85, .14);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      margin-top: 2px
+    }
+
+    .does b {
+      font-weight: 600
+    }
+
+    .does p {
+      font-size: .94rem;
+      color: var(--muted);
+      margin-top: 2px
+    }
+
+    @media(max-width:700px) {
+      .does {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* diferenciador */
+    .why {
+      background: var(--paper-2)
+    }
+
+    .why-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center
+    }
+
+    .why-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px
+    }
+
+    .why-card .row {
+      display: flex;
+      gap: 14px;
+      padding: 20px;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--line-soft)
+    }
+
+    .why-card .row:last-child {
+      border-bottom: none
+    }
+
+    .why-card .ic {
+      font-size: 1.4rem
+    }
+
+    .why-card b {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 3px
+    }
+
+    .why-card span {
+      font-size: .94rem;
+      color: var(--muted)
+    }
+
+    .why h2 {
+      margin-bottom: 18px
+    }
+
+    .why ul {
+      margin: 22px 0 0;
+      padding: 0
+    }
+
+    .why li {
+      list-style: none;
+      padding: 9px 0;
+      color: var(--ink-soft);
+      display: flex;
+      gap: 12px
+    }
+
+    .why li::before {
+      content: "✓";
+      color: var(--green);
+      font-weight: 800
+    }
+
+    @media(max-width:820px) {
+      .why-grid {
+        grid-template-columns: 1fr;
+        gap: 36px
+      }
+    }
+
+    /* demo */
+    .demo {
+      text-align: center;
+      background: var(--ink);
+      color: var(--paper)
+    }
+
+    .demo h2 {
+      color: var(--paper);
+      font-size: clamp(2rem, 4vw, 3.1rem);
+      max-width: 18ch;
+      margin: 16px auto 18px
+    }
+
+    .demo p {
+      color: #b9c9c0;
+      font-size: 1.15rem;
+      max-width: 46ch;
+      margin: 0 auto 34px
+    }
+
+    .demo .eyebrow {
+      color: var(--green-bright);
+      justify-content: center;
+      display: flex
+    }
+
+    .demo .eyebrow::before {
+      background: var(--green-bright)
+    }
+
+    /* precios */
+    .price-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 820px
+    }
+
+    .plan {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 34px;
+      background: #fff
+    }
+
+    .plan.feat {
+      border: 1.5px solid var(--green);
+      position: relative;
+      box-shadow: 0 16px 40px -18px rgba(31, 168, 85, .4)
+    }
+
+    .plan .tag {
+      position: absolute;
+      top: -13px;
+      left: 34px;
+      background: var(--green-bright);
+      color: #062b16;
+      font-size: .72rem;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 999px;
+      letter-spacing: .04em
+    }
+
+    .plan h3 {
+      font-size: 1.35rem;
+      font-weight: 700
+    }
+
+    .plan .amt {
+      font-family: 'Bricolage Grotesque';
+      font-size: 2.6rem;
+      font-weight: 800;
+      margin: 14px 0 4px
+    }
+
+    .plan .amt small {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--muted)
+    }
+
+    .plan .sub {
+      color: var(--muted);
+      font-size: .95rem;
+      margin-bottom: 20px
+    }
+
+    .plan ul {
+      list-style: none;
+      margin: 20px 0 26px
+    }
+
+    .plan li {
+      padding: 8px 0;
+      color: var(--ink-soft);
+      display: flex;
+      gap: 10px;
+      font-size: .96rem
+    }
+
+    .plan li::before {
+      content: "✓";
+      color: var(--green);
+      font-weight: 800
+    }
+
+    .plan .btn {
+      width: 100%;
+      justify-content: center
+    }
+
+    @media(max-width:700px) {
+      .price-grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* faq */
+    .faq details {
+      border-bottom: 1px solid var(--line);
+      padding: 6px 0
+    }
+
+    .faq summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 20px 0;
+      font-weight: 600;
+      font-size: 1.12rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px
+    }
+
+    .faq summary::-webkit-details-marker {
+      display: none
+    }
+
+    .faq summary::after {
+      content: "+";
+      font-size: 1.5rem;
+      color: var(--green);
+      transition: transform .2s;
+      font-weight: 400
+    }
+
+    .faq details[open] summary::after {
+      transform: rotate(45deg)
+    }
+
+    .faq p {
+      padding: 0 0 22px;
+      color: var(--ink-soft);
+      max-width: 70ch
+    }
+
+    /* cierre */
+    .close {
+      text-align: center;
+      background: linear-gradient(160deg, var(--green) 0%, #0e6b3a 100%);
+      color: #fff
+    }
+
+    .close h2 {
+      color: #fff;
+      font-size: clamp(2.1rem, 4.4vw, 3.3rem);
+      max-width: 20ch;
+      margin: 0 auto 20px
+    }
+
+    .close p {
+      color: rgba(255, 255, 255, .85);
+      font-size: 1.18rem;
+      margin-bottom: 32px
+    }
+
+    .close .btn-primary {
+      background: #fff;
+      color: #0e6b3a
+    }
+
+    .close .btn-ghost {
+      border-color: rgba(255, 255, 255, .4);
+      color: #fff
+    }
+
+    .close .btn-ghost:hover {
+      border-color: #fff;
+      background: rgba(255, 255, 255, .1)
+    }
+
+    footer {
+      padding: 44px 0;
+      border-top: 1px solid var(--line-soft);
+      color: var(--muted);
+      font-size: .9rem
+    }
+
+    .foot-in {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity .7s ease, transform .7s ease
+    }
+
+    .reveal.in {
+      opacity: 1;
+      transform: none
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+      .reveal {
+        opacity: 1;
+        transform: none;
+        transition: none
+      }
+
+      .bub,
+      .typing {
+        animation: none;
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--green);
+      outline-offset: 3px;
+      border-radius: 6px
+    }
+  </style>
 </head>
+
 <body>
 
-<nav>
-  <div class="nav-in">
-    <div class="logo"><span class="dot"></span><span id="brand-nav">TuMarca</span></div>
-    <div class="nav-links">
-      <a href="#como">Cómo funciona</a>
-      <a href="#que-hace">Qué hace</a>
-      <a href="#precios">Precios</a>
-      <a href="#faq">Preguntas</a>
-    </div>
-    <a class="nav-cta" id="cta-nav" href="#">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.7-.2-.3A8 8 0 1112 20z"/></svg>
-      Escribime
-    </a>
-  </div>
-</nav>
-
-<!-- HERO -->
-<header class="hero">
-  <div class="wrap hero-grid">
-    <div>
-      <span class="eyebrow">Chatbots de WhatsApp · <span id="ciudad-eyebrow">Tucumán</span></span>
-      <h1>Tu negocio <span class="hl">responde solo</span>, las 24 horas.</h1>
-      <p class="lede">Instalo un asistente en el WhatsApp de tu negocio que contesta al toque, aunque estés cerrado. Para que no pierdas ni un cliente por no llegar a responder.</p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" id="cta-hero" href="#">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.7-.2-.3A8 8 0 1112 20z"/></svg>
-          Quiero uno para mi negocio
-        </a>
-        <a class="btn btn-ghost" href="#demo">Ver la demo</a>
+  <nav>
+    <div class="nav-in">
+      <div class="logo"><span class="dot"></span><span id="brand-nav">TuMarca</span></div>
+      <div class="nav-links">
+        <a href="#como">Cómo funciona</a>
+        <a href="#que-hace">Qué hace</a>
+        <a href="#precios">Precios</a>
+        <a href="#faq">Preguntas</a>
       </div>
-      <div class="trust"><b>Sin apps ni programas.</b> Funciona en el mismo WhatsApp que ya usás.</div>
-    </div>
-
-    <!-- signature: chat animado -->
-    <div class="phone" aria-hidden="true">
-      <div class="phone-screen">
-        <div class="wa-bar">
-          <div class="wa-av">R</div>
-          <div><div class="wa-name">Rotisería El Fuego</div><div class="wa-status">en línea</div></div>
-        </div>
-        <div class="wa-body" id="chat"></div>
-      </div>
-    </div>
-  </div>
-</header>
-
-<div class="strip">
-  <div class="strip-in">
-    <span>Sirve para <b>cualquier negocio que atiende por WhatsApp</b>:</span>
-    <span>🍗 Rotiserías</span><span>💈 Peluquerías</span><span>🔧 Talleres</span>
-    <span>🏠 Inmobiliarias</span><span>🦷 Consultorios</span><span>🛒 Kioscos y almacenes</span>
-  </div>
-</div>
-
-<!-- PROBLEMA -->
-<section class="problem">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="eyebrow">El problema</span>
-      <h2>Cada mensaje sin responder es plata que se va con otro.</h2>
-      <p>El cliente que no recibe respuesta en minutos no espera: le escribe al de al lado. Y vos no podés estar 24/7 con el celular en la mano.</p>
-    </div>
-    <div class="loss-grid">
-      <div class="loss reveal"><div class="n">7 de 10</div><p>consultas llegan fuera del horario de atención o cuando estás con las manos ocupadas.</p></div>
-      <div class="loss reveal"><div class="n">5 min</div><p>es lo que tarda un cliente promedio en irse a la competencia si no le contestás.</p></div>
-      <div class="loss reveal"><div class="n">$0</div><p>es lo que cuesta perder una venta por "no llegué a ver el mensaje". Y pasa todos los días.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- CÓMO FUNCIONA -->
-<section id="como">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="eyebrow">Cómo funciona</span>
-      <h2>Simple para vos, invisible para el cliente.</h2>
-      <p>Me contás cómo trabaja tu negocio. Yo lo dejo andando. El cliente escribe como siempre y le responde al instante.</p>
-    </div>
-    <div class="steps">
-      <div class="step reveal"><div class="step-n">1</div><h3>Me contás tu negocio</h3><p>Precios, horarios, cómo tomás pedidos o turnos, las preguntas de siempre. En una charla alcanza.</p></div>
-      <div class="step reveal"><div class="step-n">2</div><h3>Lo dejo funcionando</h3><p>Lo conecto al WhatsApp oficial de tu negocio y lo ajusto con vos hasta que responda como querés.</p></div>
-      <div class="step reveal"><div class="step-n">3</div><h3>Responde solo</h3><p>Desde ese día contesta las 24 horas. Cuando hace falta una persona, te pasa la conversación.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- QUÉ HACE -->
-<section id="que-hace" style="padding-top:0">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="eyebrow">Qué hace</span>
-      <h2>Trabaja como un empleado que nunca se va.</h2>
-    </div>
-    <ul class="does">
-      <li class="reveal"><span class="ck">✓</span><div><b>Responde las preguntas de siempre</b><p>Horarios, precios, si tenés stock, dónde estás, cómo pagar, si hacés envíos.</p></div></li>
-      <li class="reveal"><span class="ck">✓</span><div><b>Toma pedidos y reservas</b><p>Guía al cliente hasta cerrar el pedido o el turno, sin que muevas un dedo.</p></div></li>
-      <li class="reveal"><span class="ck">✓</span><div><b>Atiende de noche y los feriados</b><p>Cuando el negocio está cerrado, el WhatsApp sigue vendiendo.</p></div></li>
-      <li class="reveal"><span class="ck">✓</span><div><b>Te pasa el cliente cuando hace falta</b><p>Si es algo delicado o especial, deriva la charla a una persona real. Vos.</p></div></li>
-      <li class="reveal"><span class="ck">✓</span><div><b>Habla como tu negocio</b><p>Con tu tono, tu forma de tratar al cliente. No suena a robot genérico.</p></div></li>
-      <li class="reveal"><span class="ck">✓</span><div><b>No inventa ni promete de más</b><p>Contesta solo sobre lo tuyo. Fuera de tema, deriva. Sin líos.</p></div></li>
-    </ul>
-  </div>
-</section>
-
-<!-- DIFERENCIADOR -->
-<section class="why">
-  <div class="wrap why-grid">
-    <div class="reveal">
-      <span class="eyebrow">Por qué conmigo</span>
-      <h2>Estoy acá, en <span id="ciudad-why">Tucumán</span>. No sos un ticket de soporte.</h2>
-      <p style="color:var(--ink-soft);font-size:1.08rem">Cualquiera te vende un chatbot desde una web. La diferencia es quién te lo instala, te lo ajusta y te atiende cuando algo no anda.</p>
-      <ul>
-        <li>Nos juntamos, te lo muestro y lo armamos a tu medida</li>
-        <li>Lo hago sobre el WhatsApp oficial de Meta, no un parche que se cae</li>
-        <li>Setup, pruebas y soporte de una persona que conocés</li>
-        <li>Si algo falla, me escribís a mí, no a un formulario en inglés</li>
-      </ul>
-    </div>
-    <div class="why-card reveal">
-      <div class="row"><div class="ic">🤝</div><div><b>Cara a cara</b><span>Te lo explico y lo probás en persona antes de decidir.</span></div></div>
-      <div class="row"><div class="ic">🛠️</div><div><b>Hecho a tu medida</b><span>Configurado con los datos reales de tu negocio, no una plantilla.</span></div></div>
-      <div class="row"><div class="ic">🇦🇷</div><div><b>Soporte local</b><span>Te contesto yo, en tu idioma y tu horario.</span></div></div>
-      <div class="row"><div class="ic">✅</div><div><b>WhatsApp oficial</b><span>Sobre la API oficial de Meta. Estable y sin riesgo de baneo.</span></div></div>
-    </div>
-  </div>
-</section>
-
-<!-- DEMO -->
-<section class="demo" id="demo">
-  <div class="wrap">
-    <span class="eyebrow">Probalo</span>
-    <h2>No te lo cuento. Lo probás.</h2>
-    <p>Escribile como si fueras un cliente. Preguntale cualquier cosa. Vas a ver cómo responde solo, al toque.</p>
-    <a class="btn btn-primary" id="cta-demo" href="#">Abrir la demo en vivo</a>
-  </div>
-</section>
-
-<!-- PRECIOS -->
-<section id="precios">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="eyebrow">Precios</span>
-      <h2>Claro y sin sorpresas.</h2>
-      <p>Una instalación única para dejarlo andando, y un mensual para que siga funcionando y con soporte.</p>
-    </div>
-    <div class="price-grid">
-      <div class="plan reveal">
-        <h3>Instalación</h3>
-        <div class="amt" id="p-setup">$—</div>
-        <div class="sub">Pago único, para arrancar</div>
-        <ul>
-          <li>Conexión al WhatsApp oficial</li>
-          <li>Configurado con tus datos</li>
-          <li>Pruebas y ajustes con vos</li>
-          <li>Lo dejo andando y listo</li>
-        </ul>
-        <a class="btn btn-ghost" id="cta-plan1" href="#">Consultar</a>
-      </div>
-      <div class="plan feat reveal">
-        <span class="tag">RECOMENDADO</span>
-        <h3>Mensual</h3>
-        <div class="amt" id="p-mensual">$—<small>/mes</small></div>
-        <div class="sub">Para que siga andando y mejorando</div>
-        <ul>
-          <li>Todo funcionando 24/7</li>
-          <li>Ajustes cuando cambien precios u horarios</li>
-          <li>Soporte directo conmigo</li>
-          <li>Sin permanencia</li>
-        </ul>
-        <a class="btn btn-primary" id="cta-plan2" href="#">Quiero empezar</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- FAQ -->
-<section id="faq" style="padding-top:0">
-  <div class="wrap" style="max-width:820px">
-    <div class="sec-head reveal">
-      <span class="eyebrow">Preguntas</span>
-      <h2>Lo que todos me preguntan.</h2>
-    </div>
-    <div class="faq reveal">
-      <details><summary>¿Reemplaza a una persona?</summary><p>No. Se encarga de lo repetitivo — horarios, precios, pedidos simples, preguntas de siempre — para que vos te ocupes de lo importante. Y cuando la consulta es delicada, te pasa la conversación a vos.</p></details>
-      <details><summary>¿Es el WhatsApp oficial o me van a banear?</summary><p>Es el 100% oficial. Se conecta a la API que Meta ofrece justamente para negocios. Cero riesgo de baneo, a diferencia de los parches truchos que se caen.</p></details>
-      <details><summary>¿Qué necesito para arrancar?</summary><p>Un número de WhatsApp para el negocio y una charla conmigo para que me cuentes cómo trabajás. Del resto me ocupo yo.</p></details>
-      <details><summary>¿Y si el bot se equivoca o le preguntan algo raro?</summary><p>Está armado para contestar solo sobre tu negocio. Ante algo fuera de tema o delicado, no inventa: deriva a una persona. Le pongo límites claros para que nunca prometa lo que no puede cumplir.</p></details>
-      <details><summary>¿Puedo cambiar precios u horarios después?</summary><p>Sí, cuando quieras. Me avisás y lo actualizo. En el plan mensual, esos ajustes ya están incluidos.</p></details>
-      <details><summary>¿Cuánto tarda en estar andando?</summary><p>Con la info de tu negocio, en pocos días lo tenés funcionando y probado.</p></details>
-    </div>
-  </div>
-</section>
-
-<!-- CIERRE -->
-<section class="close">
-  <div class="wrap">
-    <h2 class="reveal">Dejá de perder clientes por no contestar a tiempo.</h2>
-    <p class="reveal">Escribime y te muestro cómo quedaría en tu negocio. Sin compromiso.</p>
-    <div class="hero-cta reveal" style="justify-content:center">
-      <a class="btn btn-primary" id="cta-close" href="#">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.7-.2-.3A8 8 0 1112 20z"/></svg>
-        Escribime por WhatsApp
+      <a class="nav-cta" id="cta-nav" href="#">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <path
+            d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.7-.2-.3A8 8 0 1112 20z" />
+        </svg>
+        Escribime
       </a>
     </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Chatbots de WhatsApp · <span id="ciudad-eyebrow">Tucumán</span></span>
+        <h1>Tu negocio <span class="hl">responde solo</span>, las 24 horas.</h1>
+        <p class="lede">Instalo un asistente en el WhatsApp de tu negocio que contesta al toque, aunque estés cerrado.
+          Para que no pierdas ni un cliente por no llegar a responder.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" id="cta-hero" href="#">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.7-.2-.3A8 8 0 1112 20z" />
+            </svg>
+            Quiero uno para mi negocio
+          </a>
+          <a class="btn btn-ghost" href="#demo">Ver la demo</a>
+        </div>
+        <div class="trust"><b>Sin apps ni programas.</b> Funciona en el mismo WhatsApp que ya usás.</div>
+      </div>
+
+      <!-- signature: chat animado -->
+      <div class="phone" aria-hidden="true">
+        <div class="phone-screen">
+          <div class="wa-bar">
+            <div class="wa-av">R</div>
+            <div>
+              <div class="wa-name">Rotisería El Fuego</div>
+              <div class="wa-status">en línea</div>
+            </div>
+          </div>
+          <div class="wa-body" id="chat"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="strip">
+    <div class="strip-in">
+      <span>Sirve para <b>cualquier negocio que atiende por WhatsApp</b>:</span>
+      <span>🍗 Rotiserías</span><span>💈 Peluquerías</span><span>🔧 Talleres</span>
+      <span>🏠 Inmobiliarias</span><span>🦷 Consultorios</span><span>🛒 Kioscos y almacenes</span>
+    </div>
   </div>
-</section>
 
-<footer>
-  <div class="wrap foot-in">
-    <div class="logo" style="font-size:1.1rem"><span class="dot"></span><span id="brand-foot">TuMarca</span></div>
-    <div id="foot-contact">Chatbots de WhatsApp para negocios · <span id="ciudad-foot">Tucumán</span></div>
-  </div>
-</footer>
+  <!-- PROBLEMA -->
+  <section class="problem">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">El problema</span>
+        <h2>Cada mensaje sin responder es plata que se va con otro.</h2>
+        <p>El cliente que no recibe respuesta en minutos no espera: le escribe al de al lado. Y vos no podés estar 24/7
+          con el celular en la mano.</p>
+      </div>
+      <div class="loss-grid">
+        <div class="loss reveal">
+          <div class="n">7 de 10</div>
+          <p>consultas llegan fuera del horario de atención o cuando estás con las manos ocupadas.</p>
+        </div>
+        <div class="loss reveal">
+          <div class="n">5 min</div>
+          <p>es lo que tarda un cliente promedio en irse a la competencia si no le contestás.</p>
+        </div>
+        <div class="loss reveal">
+          <div class="n">$0</div>
+          <p>es lo que cuesta perder una venta por "no llegué a ver el mensaje". Y pasa todos los días.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-<script>
-// aplicar CONFIG
-const wa = "https://wa.me/" + CONFIG.telWhatsApp + "?text=" + encodeURIComponent("Hola! Me interesa el chatbot de WhatsApp para mi negocio.");
-document.querySelectorAll('#cta-nav,#cta-hero,#cta-close,#cta-plan1,#cta-plan2').forEach(a=>a.href=wa);
-document.getElementById('cta-demo').href = CONFIG.demoUrl;
-['brand-nav','brand-foot'].forEach(id=>document.getElementById(id).textContent=CONFIG.marca);
-['ciudad-eyebrow','ciudad-why','ciudad-foot'].forEach(id=>document.getElementById(id).textContent=CONFIG.ciudad);
-document.getElementById('p-setup').textContent = CONFIG.precioSetup;
-document.getElementById('p-mensual').innerHTML = CONFIG.precioMensual.replace('/mes','<small>/mes</small>');
+  <!-- CÓMO FUNCIONA -->
+  <section id="como">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Cómo funciona</span>
+        <h2>Simple para vos, invisible para el cliente.</h2>
+        <p>Me contás cómo trabaja tu negocio. Yo lo dejo andando. El cliente escribe como siempre y le responde al
+          instante.</p>
+      </div>
+      <div class="steps">
+        <div class="step reveal">
+          <div class="step-n">1</div>
+          <h3>Me contás tu negocio</h3>
+          <p>Precios, horarios, cómo tomás pedidos o turnos, las preguntas de siempre. En una charla alcanza.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-n">2</div>
+          <h3>Lo dejo funcionando</h3>
+          <p>Lo conecto al WhatsApp oficial de tu negocio y lo ajusto con vos hasta que responda como querés.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-n">3</div>
+          <h3>Responde solo</h3>
+          <p>Desde ese día contesta las 24 horas. Cuando hace falta una persona, te pasa la conversación.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-// chat animado del hero
-const guion = [
-  {tipo:'in', txt:'Hola! Están abiertos? 🍗', t:'23:47'},
-  {tipo:'out',txt:'Hola! Sí, hasta las 00:30. Querés hacer un pedido?', t:'23:47'},
-  {tipo:'in', txt:'Tienen pollo entero al horno?', t:'23:48'},
-  {tipo:'out',txt:'Sí 👍 Pollo entero $—, con papas $—. Te lo preparo?', t:'23:48'},
-  {tipo:'in', txt:'Dale, y hacen envío a Yerba Buena?', t:'23:49'},
-  {tipo:'out',txt:'Sí, envío a Yerba Buena. Pasame tu dirección y en 40 min lo tenés 🛵', t:'23:49'},
-];
-const chat = document.getElementById('chat');
-let idx=0;
-function render(){
-  chat.innerHTML='';
-  let delay=0;
-  const shown = guion.slice(0, idx+1);
-  shown.forEach((m,i)=>{
-    const b=document.createElement('div');
-    b.className='bub '+m.tipo;
-    b.style.animationDelay=(i*0.06)+'s';
-    b.innerHTML=m.txt+'<span class="t">'+m.t+' ✓✓</span>';
-    chat.appendChild(b);
-  });
-}
-function loop(){
-  if(idx < guion.length){
-    render(); idx++;
-    setTimeout(loop, idx<guion.length ? 1400 : 3200);
-  } else {
-    setTimeout(()=>{idx=0; loop();}, 2600);
-  }
-}
-render(); setTimeout(loop, 700);
+  <!-- QUÉ HACE -->
+  <section id="que-hace" style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Qué hace</span>
+        <h2>Trabaja como un empleado que nunca se va.</h2>
+      </div>
+      <ul class="does">
+        <li class="reveal"><span class="ck">✓</span>
+          <div><b>Responde las preguntas de siempre</b>
+            <p>Horarios, precios, si tenés stock, dónde estás, cómo pagar, si hacés envíos.</p>
+          </div>
+        </li>
+        <li class="reveal"><span class="ck">✓</span>
+          <div><b>Toma pedidos y reservas</b>
+            <p>Guía al cliente hasta cerrar el pedido o el turno, sin que muevas un dedo.</p>
+          </div>
+        </li>
+        <li class="reveal"><span class="ck">✓</span>
+          <div><b>Atiende de noche y los feriados</b>
+            <p>Cuando el negocio está cerrado, el WhatsApp sigue vendiendo.</p>
+          </div>
+        </li>
+        <li class="reveal"><span class="ck">✓</span>
+          <div><b>Te pasa el cliente cuando hace falta</b>
+            <p>Si es algo delicado o especial, deriva la charla a una persona real. Vos.</p>
+          </div>
+        </li>
+        <li class="reveal"><span class="ck">✓</span>
+          <div><b>Habla como tu negocio</b>
+            <p>Con tu tono, tu forma de tratar al cliente. No suena a robot genérico.</p>
+          </div>
+        </li>
+        <li class="reveal"><span class="ck">✓</span>
+          <div><b>No inventa ni promete de más</b>
+            <p>Contesta solo sobre lo tuyo. Fuera de tema, deriva. Sin líos.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
 
-// reveal on scroll
-const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('in')}),{threshold:.15});
-document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
-</script>
+  <!-- DIFERENCIADOR -->
+  <section class="why">
+    <div class="wrap why-grid">
+      <div class="reveal">
+        <span class="eyebrow">Por qué conmigo</span>
+        <h2>Estoy acá, en <span id="ciudad-why">Tucumán</span>. No sos un ticket de soporte.</h2>
+        <p style="color:var(--ink-soft);font-size:1.08rem">Cualquiera te vende un chatbot desde una web. La diferencia
+          es quién te lo instala, te lo ajusta y te atiende cuando algo no anda.</p>
+        <ul>
+          <li>Nos juntamos, te lo muestro y lo armamos a tu medida</li>
+          <li>Lo hago sobre el WhatsApp oficial de Meta, no un parche que se cae</li>
+          <li>Setup, pruebas y soporte de una persona que conocés</li>
+          <li>Si algo falla, me escribís a mí, no a un formulario en inglés</li>
+        </ul>
+      </div>
+      <div class="why-card reveal">
+        <div class="row">
+          <div class="ic">🤝</div>
+          <div><b>Cara a cara</b><span>Te lo explico y lo probás en persona antes de decidir.</span></div>
+        </div>
+        <div class="row">
+          <div class="ic">🛠️</div>
+          <div><b>Hecho a tu medida</b><span>Configurado con los datos reales de tu negocio, no una plantilla.</span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="ic">🇦🇷</div>
+          <div><b>Soporte local</b><span>Te contesto yo, en tu idioma y tu horario.</span></div>
+        </div>
+        <div class="row">
+          <div class="ic">✅</div>
+          <div><b>WhatsApp oficial</b><span>Sobre la API oficial de Meta. Estable y sin riesgo de baneo.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section class="demo" id="demo">
+    <div class="wrap">
+      <span class="eyebrow">Probalo</span>
+      <h2>No te lo cuento. Lo probás.</h2>
+      <p>Escribile como si fueras un cliente. Preguntale cualquier cosa. Vas a ver cómo responde solo, al toque.</p>
+      <a class="btn btn-primary" id="cta-demo" href="#">Abrir la demo en vivo</a>
+    </div>
+  </section>
+
+  <!-- PRECIOS -->
+  <section id="precios">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Precios</span>
+        <h2>Claro y sin sorpresas.</h2>
+        <p>Una instalación única para dejarlo andando, y un mensual para que siga funcionando y con soporte.</p>
+      </div>
+      <div class="price-grid">
+        <div class="plan reveal">
+          <h3>Instalación</h3>
+          <div class="amt" id="p-setup">$—</div>
+          <div class="sub" id="p-setup-nota">Pago único, para arrancar</div>
+          <ul>
+            <li>Conexión al WhatsApp oficial</li>
+            <li>Configurado con tus datos</li>
+            <li>Pruebas y ajustes con vos</li>
+            <li>Lo dejo andando y listo</li>
+          </ul>
+          <a class="btn btn-ghost" id="cta-plan1" href="#">Consultar</a>
+        </div>
+        <div class="plan feat reveal">
+          <span class="tag">RECOMENDADO</span>
+          <h3>Mensual</h3>
+          <div class="amt" id="p-mensual">$—<small>/mes</small></div>
+          <div class="sub" id="p-mensual-nota">Para que siga andando y mejorando</div>
+          <ul>
+            <li>Todo funcionando 24/7</li>
+            <li>Ajustes cuando cambien precios u horarios</li>
+            <li>Soporte directo conmigo</li>
+            <li>Sin permanencia</li>
+          </ul>
+          <a class="btn btn-primary" id="cta-plan2" href="#">Quiero empezar</a>
+        </div>
+      </div>
+      <p class="reveal" style="margin-top:20px;color:var(--muted);font-size:.92rem;max-width:60ch">
+        El número final depende de cuánto te escriben por mes y de si el bot necesita conectarse
+        a datos en vivo (stock, pedidos) o alcanza con precios y horarios fijos. Lo vemos juntos
+        en la reunión.
+      </p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" style="padding-top:0">
+    <div class="wrap" style="max-width:820px">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Preguntas</span>
+        <h2>Lo que todos me preguntan.</h2>
+      </div>
+      <div class="faq reveal">
+        <details>
+          <summary>¿Reemplaza a una persona?</summary>
+          <p>No. Se encarga de lo repetitivo — horarios, precios, pedidos simples, preguntas de siempre — para que vos
+            te ocupes de lo importante. Y cuando la consulta es delicada, te pasa la conversación a vos.</p>
+        </details>
+        <details>
+          <summary>¿Es el WhatsApp oficial o me van a banear?</summary>
+          <p>Es el 100% oficial. Se conecta a la API que Meta ofrece justamente para negocios. Cero riesgo de baneo, a
+            diferencia de los parches truchos que se caen.</p>
+        </details>
+        <details>
+          <summary>¿Qué necesito para arrancar?</summary>
+          <p>Un número de WhatsApp para el negocio y una charla conmigo para que me cuentes cómo trabajás. Del resto me
+            ocupo yo.</p>
+        </details>
+        <details>
+          <summary>¿Y si el bot se equivoca o le preguntan algo raro?</summary>
+          <p>Está armado para contestar solo sobre tu negocio. Ante algo fuera de tema o delicado, no inventa: deriva a
+            una persona. Le pongo límites claros para que nunca prometa lo que no puede cumplir.</p>
+        </details>
+        <details>
+          <summary>¿Puedo cambiar precios u horarios después?</summary>
+          <p>Sí, cuando quieras. Me avisás y lo actualizo. En el plan mensual, esos ajustes ya están incluidos.</p>
+        </details>
+        <details>
+          <summary>¿Por qué el precio es "desde" y no un número fijo?</summary>
+          <p>Porque no es lo mismo un negocio que recibe 10 consultas por día que uno que recibe 100. Cobro según cuánto
+            te escriben y qué tan complejo es lo que el bot tiene que resolver — no un precio parejo para todos. En la
+            reunión te digo el número exacto para tu caso, sin sorpresas después.</p>
+        </details>
+        <details>
+          <summary>¿Cuánto tarda en estar andando?</summary>
+          <p>Con la info de tu negocio, en pocos días lo tenés funcionando y probado.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CIERRE -->
+  <section class="close">
+    <div class="wrap">
+      <h2 class="reveal">Dejá de perder clientes por no contestar a tiempo.</h2>
+      <p class="reveal">Escribime y te muestro cómo quedaría en tu negocio. Sin compromiso.</p>
+      <div class="hero-cta reveal" style="justify-content:center">
+        <a class="btn btn-primary" id="cta-close" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.8.8.8-2.7-.2-.3A8 8 0 1112 20z" />
+          </svg>
+          Escribime por WhatsApp
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-in">
+      <div class="logo" style="font-size:1.1rem"><span class="dot"></span><span id="brand-foot">TuMarca</span></div>
+      <div id="foot-contact">Chatbots de WhatsApp para negocios · <span id="ciudad-foot">Tucumán</span></div>
+    </div>
+  </footer>
+
+  <script>
+    // aplicar CONFIG
+    const wa = "https://wa.me/" + CONFIG.telWhatsApp + "?text=" + encodeURIComponent("Hola! Me interesa el chatbot de WhatsApp para mi negocio.");
+    document.querySelectorAll('#cta-nav,#cta-hero,#cta-close,#cta-plan1,#cta-plan2').forEach(a => a.href = wa);
+    document.getElementById('cta-demo').href = CONFIG.demoUrl;
+    ['brand-nav', 'brand-foot'].forEach(id => document.getElementById(id).textContent = CONFIG.marca);
+    ['ciudad-eyebrow', 'ciudad-why', 'ciudad-foot'].forEach(id => document.getElementById(id).textContent = CONFIG.ciudad);
+    document.getElementById('p-setup').textContent = CONFIG.precioSetup;
+    document.getElementById('p-setup-nota').textContent = CONFIG.precioSetupNota;
+    document.getElementById('p-mensual').innerHTML = CONFIG.precioMensual.replace('/mes', '<small>/mes</small>');
+    document.getElementById('p-mensual-nota').textContent = CONFIG.precioMensualNota;
+
+    // chat animado del hero
+    const guion = [
+      { tipo: 'in', txt: 'Hola! Están abiertos? 🍗', t: '23:47' },
+      { tipo: 'out', txt: 'Hola! Sí, hasta las 00:30. Querés hacer un pedido?', t: '23:47' },
+      { tipo: 'in', txt: 'Tienen pollo entero al horno?', t: '23:48' },
+      { tipo: 'out', txt: 'Sí 👍 Pollo entero $—, con papas $—. Te lo preparo?', t: '23:48' },
+      { tipo: 'in', txt: 'Dale, y hacen envío a Yerba Buena?', t: '23:49' },
+      { tipo: 'out', txt: 'Sí, envío a Yerba Buena. Pasame tu dirección y en 40 min lo tenés 🛵', t: '23:49' },
+    ];
+    const chat = document.getElementById('chat');
+    let idx = 0;
+    function render() {
+      chat.innerHTML = '';
+      let delay = 0;
+      const shown = guion.slice(0, idx + 1);
+      shown.forEach((m, i) => {
+        const b = document.createElement('div');
+        b.className = 'bub ' + m.tipo;
+        b.style.animationDelay = (i * 0.06) + 's';
+        b.innerHTML = m.txt + '<span class="t">' + m.t + ' ✓✓</span>';
+        chat.appendChild(b);
+      });
+    }
+    function loop() {
+      if (idx < guion.length) {
+        render(); idx++;
+        setTimeout(loop, idx < guion.length ? 1400 : 3200);
+      } else {
+        setTimeout(() => { idx = 0; loop(); }, 2600);
+      }
+    }
+    render(); setTimeout(loop, 700);
+
+    // reveal on scroll
+    const io = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) e.target.classList.add('in') }), { threshold: .15 });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+  </script>
 </body>
+
 </html>
