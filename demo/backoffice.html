@@ -11,7 +11,7 @@
     body { background: #0b141a; color: #e9edef }
 
     /* ── Login ── */
-    #login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px }
+    #login { display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 16px }
     #login form { background: #1f2c34; border: 1px solid #2a3942; border-radius: 14px; padding: 28px; width: 100%; max-width: 320px }
     #login h1 { font-size: 1.1rem; margin-bottom: 16px }
     #login input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #2a3942; background: #0b141a; color: #e9edef; font-size: .95rem; margin-bottom: 10px }
@@ -161,7 +161,10 @@
       let data;
       try {
         data = await api('/api/backoffice/conversaciones' + (tabActual ? ('?estado=' + tabActual) : ''));
-      } catch (e) { return; }
+      } catch (e) {
+        document.getElementById('lista').innerHTML = '<div class="vacio">⚠️ ' + esc(e.message) + '</div>';
+        return;
+      }
       const lista = document.getElementById('lista');
       const convs = data.conversaciones || [];
       if (!convs.length) {
@@ -270,7 +273,7 @@
     }
 
     // ¿Ya había una sesión activa? probamos pegándole a conversaciones.
-    api('/api/backoffice/conversaciones?estado=humano').then(mostrarApp).catch(() => {});
+    api('/api/backoffice/conversaciones?estado=humano').then(mostrarApp).catch(mostrarLogin);
   </script>
 </body>
 
