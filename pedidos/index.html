@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#c0271f">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Pedidos — Mostrador</title>
+  <style>
+    /* ─────────── Base ─────────── */
+    :root {
+      --bg: #f4f5f7;
+      --card: #ffffff;
+      --ink: #14181d;
+      --muted: #5b6773;
+      --line: #dfe3e8;
+      --brand: #c0271f;
+      --ok: #128a3a;
+      --ok-bg: #e4f6ea;
+      --no: #c0271f;
+      --no-bg: #fbe6e4;
+      --edit: #b26a00;
+      --edit-bg: #fdf0dd;
+      --warn: #e88a00;
+      --urgent: #c0271f;
+      --shadow: 0 2px 6px rgba(20, 24, 29, .08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif }
+    html, body { height: 100% }
+    body { background: var(--bg); color: var(--ink); font-size: 17px; overscroll-behavior: none }
+    button { font-family: inherit; cursor: pointer }
+    .hidden { display: none !important }
+
+    /* ─────────── Login (PIN) ─────────── */
+    #login { position: fixed; inset: 0; background: var(--brand); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50 }
+    .pinbox { width: 100%; max-width: 340px; text-align: center; color: #fff }
+    .pinbox h1 { font-size: 1.5rem; margin-bottom: 4px }
+    .pinbox p { opacity: .85; margin-bottom: 22px; font-size: .95rem }
+    .pindots { display: flex; gap: 14px; justify-content: center; height: 22px; margin-bottom: 10px }
+    .pindots i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7) }
+    .pindots i.on { background: #fff }
+    .pinerr { min-height: 22px; color: #ffd9d4; font-weight: 600; margin-bottom: 12px }
+    .pinpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px }
+    .pinpad button { height: 66px; border: none; border-radius: 14px; background: rgba(255,255,255,.16); color: #fff; font-size: 1.7rem; font-weight: 600 }
+    .pinpad button:active { background: rgba(255,255,255,.32) }
+    .pinpad button.wide { font-size: 1rem }
+
+    /* ─────────── Top bar ─────────── */
+    header.top { position: sticky; top: 0; z-index: 20; background: var(--brand); color: #fff; display: flex; align-items: center; gap: 10px; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); box-shadow: var(--shadow) }
+    header.top .titulo { font-size: 1.25rem; font-weight: 700; flex: 1; display: flex; align-items: center; gap: 10px }
+    header.top .back { background: rgba(255,255,255,.18); border: none; color: #fff; width: 44px; height: 44px; border-radius: 12px; font-size: 1.4rem; display: none }
+    header.top nav { display: flex; gap: 8px }
+    header.top nav button { background: rgba(255,255,255,.16); border: none; color: #fff; padding: 10px 12px; border-radius: 12px; font-size: .9rem; font-weight: 600; display: flex; align-items: center; gap: 6px }
+    header.top nav button:active { background: rgba(255,255,255,.3) }
+    .conteo { background: #fff; color: var(--brand); border-radius: 999px; min-width: 26px; height: 26px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; font-size: .95rem; font-weight: 800 }
+
+    main { padding: 14px; max-width: 900px; margin: 0 auto }
+    .view { display: none }
+    .view.activa { display: block }
+
+    /* ─────────── Banner nuevo pedido ─────────── */
+    #bannerNuevo { position: sticky; top: 68px; z-index: 15; background: #12351f; color: #d6ffe4; border: 2px solid #1c7a3e; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow); animation: pulseBanner 1.1s infinite }
+    #bannerNuevo button { margin-left: auto; background: #1c7a3e; border: none; color: #fff; padding: 8px 14px; border-radius: 10px; font-weight: 700 }
+    @keyframes pulseBanner { 0%,100% { box-shadow: 0 0 0 0 rgba(28,122,62,.5) } 50% { box-shadow: 0 0 0 10px rgba(28,122,62,0) } }
+
+    /* ─────────── Cola: tarjetas de pedido ─────────── */
+    .vacio { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 1.05rem }
+    .vacio .big { font-size: 3rem; display: block; margin-bottom: 10px }
+    .pedido-card { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; border-left: 8px solid var(--line); display: flex; gap: 14px; align-items: center }
+    .pedido-card:active { transform: scale(.995) }
+    .pedido-card.u-media { border-left-color: var(--warn); background: #fffaf0 }
+    .pedido-card.u-alta { border-left-color: var(--urgent); background: #fdf0ee }
+    .pedido-card.nuevo { animation: destello 1.2s ease-in-out 3 }
+    @keyframes destello { 0%,100% { box-shadow: var(--shadow) } 50% { box-shadow: 0 0 0 4px #1c7a3e } }
+    .pedido-card .info { flex: 1; min-width: 0 }
+    .pedido-card .l1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px }
+    .pedido-card .cliente { font-size: 1.2rem; font-weight: 700 }
+    .pedido-card .resumen { color: var(--muted); font-size: .98rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
+    .pedido-card .edad { text-align: right; white-space: nowrap; font-weight: 700 }
+    .pedido-card .edad .min { font-size: 1.35rem }
+    .pedido-card .edad .reloj { display: block; color: var(--muted); font-weight: 500; font-size: .85rem }
+    .pedido-card.u-media .edad .min { color: var(--warn) }
+    .pedido-card.u-alta .edad .min { color: var(--urgent) }
+    .pedido-card .flecha { color: var(--muted); font-size: 1.6rem }
+    .chip { font-size: .75rem; font-weight: 800; padding: 3px 9px; border-radius: 999px; letter-spacing: .02em }
+    .chip.nuevo { background: #1c7a3e; color: #fff }
+    .chip.fuera { background: #3a2414; color: #ffcf99 }
+    .chip.items { background: #eef1f4; color: var(--muted) }
+
+    /* ─────────── Detalle ─────────── */
+    .det-head { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px }
+    .det-head .cliente { font-size: 1.35rem; font-weight: 800 }
+    .det-head .sub { color: var(--muted); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center }
+    .det-head .nota { margin-top: 10px; background: #fff8e6; border: 1px solid #f0dfa8; border-radius: 10px; padding: 10px 12px; font-size: .95rem }
+
+    .item { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 12px; border-left: 8px solid var(--line) }
+    .item.st-confirmado { border-left-color: var(--ok); background: var(--ok-bg) }
+    .item.st-no_disponible { border-left-color: var(--no); background: var(--no-bg) }
+    .item.st-editado { border-left-color: var(--edit); background: var(--edit-bg) }
+    .item .fila { display: flex; align-items: center; gap: 12px }
+    .item .cant { font-size: 1.5rem; font-weight: 800; min-width: 92px }
+    .item.st-no_disponible .cant { text-decoration: line-through; opacity: .6 }
+    .item .nom { flex: 1; font-size: 1.2rem; font-weight: 600 }
+    .item .estado-tag { font-size: .82rem; font-weight: 800; padding: 4px 10px; border-radius: 999px }
+    .item.st-confirmado .estado-tag { background: var(--ok); color: #fff }
+    .item.st-no_disponible .estado-tag { background: var(--no); color: #fff }
+    .item.st-editado .estado-tag { background: var(--edit); color: #fff }
+    .item .acciones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px }
+    .item .acciones button { border: 2px solid var(--line); background: #fff; border-radius: 14px; padding: 14px 4px; font-size: .95rem; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink) }
+    .item .acciones button .ic { font-size: 1.5rem }
+    .item .acciones button:active { transform: scale(.96) }
+    .item .acciones button.b-ok.sel { border-color: var(--ok); background: var(--ok); color: #fff }
+    .item .acciones button.b-no.sel { border-color: var(--no); background: var(--no); color: #fff }
+    .item .acciones button.b-ed.sel { border-color: var(--edit); background: var(--edit); color: #fff }
+
+    /* confirm inline "no disponible" */
+    .item .confirmar-no { margin-top: 12px; background: var(--no-bg); border: 2px solid var(--no); border-radius: 14px; padding: 12px; text-align: center }
+    .item .confirmar-no p { font-weight: 700; margin-bottom: 10px }
+    .item .confirmar-no .row { display: flex; gap: 10px }
+    .item .confirmar-no button { flex: 1; padding: 14px; border-radius: 12px; font-size: 1rem; font-weight: 800; border: none }
+    .item .confirmar-no .si { background: var(--no); color: #fff }
+    .item .confirmar-no .cancel { background: #fff; border: 2px solid var(--line); color: var(--ink) }
+
+    /* editor de cantidad inline */
+    .item .editor { margin-top: 12px; background: var(--edit-bg); border: 2px solid var(--edit); border-radius: 14px; padding: 12px }
+    .item .editor .qrow { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 12px }
+    .item .editor .step { width: 60px; height: 60px; border-radius: 14px; border: none; background: var(--edit); color: #fff; font-size: 1.8rem; font-weight: 800 }
+    .item .editor input { width: 130px; text-align: center; font-size: 1.6rem; font-weight: 800; padding: 10px; border: 2px solid var(--edit); border-radius: 12px; background: #fff; color: var(--ink) }
+    .item .editor .uni { font-size: 1.1rem; font-weight: 700; color: var(--edit) }
+    .item .editor .row { display: flex; gap: 10px }
+    .item .editor button.g { flex: 2; padding: 14px; border-radius: 12px; font-size: 1rem; font-weight: 800; border: none; background: var(--edit); color: #fff }
+    .item .editor button.c { flex: 1; padding: 14px; border-radius: 12px; font-size: 1rem; font-weight: 800; border: 2px solid var(--line); background: #fff; color: var(--ink) }
+
+    /* barra fija confirmar pedido */
+    .confirmar-barra { position: sticky; bottom: 0; background: linear-gradient(180deg, rgba(244,245,247,0), var(--bg) 30%); padding: 14px 0 max(14px, env(safe-area-inset-bottom)); margin-top: 8px }
+    .btn-confirmar { width: 100%; background: var(--ok); color: #fff; border: none; border-radius: 18px; padding: 20px; font-size: 1.3rem; font-weight: 800; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: center; gap: 10px }
+    .btn-confirmar:active { transform: scale(.99) }
+    .btn-confirmar:disabled { opacity: .6 }
+    .resumen-conf { text-align: center; color: var(--muted); font-size: .92rem; margin-bottom: 8px }
+
+    /* ─────────── Catálogo / Historial / Horario ─────────── */
+    .barra-sec { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center }
+    .btn-primario { background: var(--ok); color: #fff; border: none; border-radius: 12px; padding: 12px 16px; font-weight: 700; font-size: 1rem }
+    .btn-sec { background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 11px 14px; font-weight: 700; color: var(--ink); font-size: 1rem }
+    .prod { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px }
+    .prod.inactivo { opacity: .55 }
+    .prod .nom { flex: 1; font-size: 1.1rem; font-weight: 600 }
+    .prod .meta { color: var(--muted); font-size: .9rem }
+    .prod .toggle, .dia .toggle { padding: 8px 12px; border-radius: 999px; border: 2px solid var(--line); background: #fff; font-weight: 700; font-size: .85rem }
+    .prod .toggle.on, .dia .toggle.on { background: var(--ok); border-color: var(--ok); color: #fff }
+    .prod .mini { width: 42px; height: 42px; border-radius: 10px; border: 2px solid var(--line); background: #fff; font-size: 1.1rem }
+
+    .dia { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+    .dia .nombre { width: 96px; font-weight: 700; font-size: 1.05rem }
+    .dia .horas { display: flex; gap: 8px; align-items: center; margin-left: auto }
+    .dia .horas input { font-size: 1.05rem; padding: 8px; border: 2px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink) }
+    .dia.cerrado .horas { opacity: .35; pointer-events: none }
+
+    /* modal (form de producto) */
+    .modal { position: fixed; inset: 0; background: rgba(10,14,18,.5); display: flex; align-items: flex-end; justify-content: center; z-index: 40; padding: 0 }
+    .modal .caja { background: var(--card); width: 100%; max-width: 480px; border-radius: 20px 20px 0 0; padding: 20px; padding-bottom: max(20px, env(safe-area-inset-bottom)) }
+    .modal h2 { font-size: 1.2rem; margin-bottom: 16px }
+    .modal label { display: block; font-weight: 700; margin: 12px 0 6px; font-size: .95rem }
+    .modal input, .modal select { width: 100%; padding: 14px; font-size: 1.05rem; border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink) }
+    .modal .fila2 { display: flex; gap: 10px }
+    .modal .fila2 > div { flex: 1 }
+    .modal .acc { display: flex; gap: 10px; margin-top: 20px }
+    .modal .acc button { flex: 1; padding: 15px; border-radius: 14px; font-weight: 800; font-size: 1.05rem; border: none }
+    .modal .acc .guardar { background: var(--ok); color: #fff }
+    .modal .acc .cancelar { background: #fff; border: 2px solid var(--line); color: var(--ink) }
+    .modal .borrar { width: 100%; margin-top: 12px; background: none; border: none; color: var(--no); font-weight: 700; padding: 10px }
+
+    /* toast */
+    #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: #14181d; color: #fff; padding: 14px 20px; border-radius: 12px; font-weight: 700; opacity: 0; transition: .25s; z-index: 60; pointer-events: none; max-width: 90% }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0) }
+    #toast.err { background: var(--no) }
+
+    .cargando { text-align: center; color: var(--muted); padding: 40px }
+
+    @media (min-width: 700px) {
+      body { font-size: 18px }
+      main { padding: 20px }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ══════════ LOGIN ══════════ -->
+  <div id="login" class="hidden">
+    <div class="pinbox">
+      <h1>🥩 Pedidos</h1>
+      <p>Ingresá el PIN del local</p>
+      <div class="pindots" id="pindots"></div>
+      <div class="pinerr" id="pinerr"></div>
+      <div class="pinpad" id="pinpad"></div>
+    </div>
+  </div>
+
+  <!-- ══════════ APP ══════════ -->
+  <div id="app" class="hidden">
+    <header class="top">
+      <button class="back" id="btnBack" onclick="irACola()">←</button>
+      <div class="titulo"><span id="tituloTxt">Pedidos</span><span class="conteo hidden" id="conteoPend">0</span></div>
+      <nav id="navPrincipal">
+        <button onclick="abrirVista('catalogo')">🥩 <span class="solo-ancho">Catálogo</span></button>
+        <button onclick="abrirVista('horario')">🕐 <span class="solo-ancho">Horario</span></button>
+        <button onclick="abrirVista('historial')">📋 <span class="solo-ancho">Historial</span></button>
+        <button onclick="salir()">Salir</button>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Cola -->
+      <section class="view activa" id="v-cola">
+        <div id="bannerNuevo" class="hidden">
+          <span>🔔</span><span id="bannerTxt">1 pedido nuevo</span>
+          <button onclick="verNuevo()">Ver</button>
+        </div>
+        <div id="colaLista"><div class="cargando">Cargando pedidos…</div></div>
+      </section>
+
+      <!-- Detalle -->
+      <section class="view" id="v-detalle"></section>
+
+      <!-- Catálogo -->
+      <section class="view" id="v-catalogo">
+        <div class="barra-sec">
+          <button class="btn-primario" onclick="abrirFormProducto()">＋ Nuevo producto</button>
+        </div>
+        <div id="catalogoLista"></div>
+      </section>
+
+      <!-- Horario -->
+      <section class="view" id="v-horario">
+        <div id="horarioLista"></div>
+        <div class="confirmar-barra">
+          <button class="btn-confirmar" onclick="guardarHorario()">Guardar horario</button>
+        </div>
+      </section>
+
+      <!-- Historial -->
+      <section class="view" id="v-historial">
+        <div class="barra-sec">
+          <label style="font-weight:700">Desde <input type="date" id="histDesde" class="btn-sec"></label>
+          <label style="font-weight:700">Hasta <input type="date" id="histHasta" class="btn-sec"></label>
+          <button class="btn-sec" onclick="cargarHistorial()">Filtrar</button>
+        </div>
+        <div id="historialLista"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // ─────────── Utilidades ───────────
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => (s == null ? "" : String(s)).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    function toast(msg, err) {
+      const t = $("toast");
+      t.textContent = msg;
+      t.className = "show" + (err ? " err" : "");
+      clearTimeout(t._t);
+      t._t = setTimeout(() => (t.className = ""), 2600);
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(opts && opts.headers) } });
+      if (r.status === 401) { mostrarLogin(); throw new Error("no autorizado"); }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
+      return d;
+    }
+
+    // creado_en viene en UTC ('YYYY-MM-DD HH:MM:SS'); lo interpretamos como UTC.
+    function parseUTC(ts) { return ts ? new Date(ts.replace(" ", "T") + "Z") : null; }
+    function minutosDesde(ts) { const d = parseUTC(ts); return d ? Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000)) : 0; }
+    function relojLocal(ts) { const d = parseUTC(ts); return d ? d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : ""; }
+    function fechaLocal(ts) { const d = parseUTC(ts); return d ? d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""; }
+
+    const UNI = { kg: "kg", g: "g", unidad: "u" };
+    function fmtCant(n, unidad) {
+      const num = Number(n);
+      const t = Number.isInteger(num) ? String(num) : num.toFixed(unidad === "kg" ? 2 : 0);
+      return unidad === "unidad" ? t : t + " " + (UNI[unidad] || unidad);
+    }
+    function pasoUnidad(u) { return u === "g" ? 100 : u === "kg" ? 0.5 : 1; }
+
+    // ─────────── Sonido (WebAudio, sin archivos) ───────────
+    let audioCtx = null;
+    function unlockAudio() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+      } catch (e) {}
+    }
+    function beep() {
+      if (!audioCtx) return;
+      try {
+        const t0 = audioCtx.currentTime;
+        [0, 0.18].forEach((off) => {
+          const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.type = "sine"; o.frequency.value = 880;
+          g.gain.setValueAtTime(0.0001, t0 + off);
+          g.gain.exponentialRampToValueAtTime(0.35, t0 + off + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + off + 0.15);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(t0 + off); o.stop(t0 + off + 0.16);
+        });
+      } catch (e) {}
+    }
+    document.addEventListener("pointerdown", unlockAudio, { once: false });
+
+    // ═════════════════════ LOGIN (PIN) ═════════════════════
+    let pin = "";
+    function pintarPin() {
+      $("pindots").innerHTML = Array.from({ length: Math.max(4, pin.length) }, (_, i) => `<i class="${i < pin.length ? "on" : ""}"></i>`).join("");
+    }
+    function construirPad() {
+      const teclas = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "borrar", "0", "ok"];
+      $("pinpad").innerHTML = teclas.map((t) =>
+        t === "borrar" ? `<button class="wide" onclick="pinTecla('borrar')">⌫</button>`
+        : t === "ok" ? `<button class="wide" onclick="pinTecla('ok')">Entrar</button>`
+        : `<button onclick="pinTecla('${t}')">${t}</button>`).join("");
+    }
+    function pinTecla(t) {
+      unlockAudio();
+      $("pinerr").textContent = "";
+      if (t === "borrar") pin = pin.slice(0, -1);
+      else if (t === "ok") return loguear();
+      else if (pin.length < 8) pin += t;
+      pintarPin();
+    }
+    async function loguear() {
+      if (!pin) return;
+      try {
+        await api("/api/auth/login", { method: "POST", body: JSON.stringify({ pin }) });
+        pin = "";
+        mostrarApp();
+      } catch (e) {
+        pin = ""; pintarPin();
+        $("pinerr").textContent = e.message === "no autorizado" ? "PIN incorrecto" : e.message;
+      }
+    }
+    function mostrarLogin() {
+      if (window._poll) { clearInterval(window._poll); window._poll = null; }
+      $("app").classList.add("hidden");
+      $("login").classList.remove("hidden");
+      pin = ""; pintarPin();
+    }
+    function mostrarApp() {
+      $("login").classList.add("hidden");
+      $("app").classList.remove("hidden");
+      irACola();
+      cargarCola();
+      if (!window._poll) window._poll = setInterval(() => { if (vistaActual === "cola") cargarCola(); }, 7000);
+    }
+    async function salir() {
+      try { await api("/api/auth/logout", { method: "POST" }); } catch (e) {}
+      mostrarLogin();
+    }
+
+    // ═════════════════════ Router de vistas ═════════════════════
+    let vistaActual = "cola";
+    const TITULOS = { cola: "Pedidos", detalle: "Pedido", catalogo: "Catálogo", horario: "Horario", historial: "Historial" };
+
+    function setVista(v) {
+      vistaActual = v;
+      document.querySelectorAll(".view").forEach((s) => s.classList.remove("activa"));
+      const id = v === "detalle" ? "v-detalle" : "v-" + v;
+      $(id) && $(id).classList.add("activa");
+      $("tituloTxt").textContent = TITULOS[v] || "Pedidos";
+      const enCola = v === "cola";
+      $("btnBack").style.display = enCola ? "none" : "block";
+      $("navPrincipal").style.display = enCola ? "flex" : "none";
+      $("conteoPend").classList.toggle("hidden", !enCola || !ultimaConteo);
+      window.scrollTo(0, 0);
+    }
+    function irACola() { setVista("cola"); pedidoActual = null; cargarCola(); }
+    function abrirVista(v) {
+      setVista(v);
+      if (v === "catalogo") cargarCatalogo();
+      if (v === "horario") cargarHorario();
+      if (v === "historial") cargarHistorial();
+    }
+
+    // ═════════════════════ COLA ═════════════════════
+    let idsConocidos = null;      // set de ids ya vistos (null = primera carga)
+    let idsNuevos = new Set();    // ids que llegaron recién (para destello/banner)
+    let ultimaConteo = 0;
+
+    function urgencia(min) { return min >= 15 ? "u-alta" : min >= 10 ? "u-media" : ""; }
+
+    async function cargarCola() {
+      let data;
+      try { data = await api("/api/pedidos?estado=pendiente"); }
+      catch (e) {
+        if (e.message !== "no autorizado") $("colaLista").innerHTML = `<div class="vacio"><span class="big">⚠️</span>Sin conexión. Reintentando…</div>`;
+        return;
+      }
+      const pedidos = data.pedidos || [];
+      ultimaConteo = pedidos.length;
+
+      // Detección de nuevos.
+      const idsAhora = new Set(pedidos.map((p) => p.id));
+      if (idsConocidos !== null) {
+        const nuevos = pedidos.filter((p) => !idsConocidos.has(p.id));
+        if (nuevos.length) {
+          nuevos.forEach((p) => idsNuevos.add(p.id));
+          beep();
+          if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+          mostrarBanner(idsNuevos.size);
+        }
+      }
+      idsConocidos = idsAhora;
+      // limpiar ids "nuevos" que ya no están pendientes
+      idsNuevos = new Set([...idsNuevos].filter((id) => idsAhora.has(id)));
+      if (!idsNuevos.size) $("bannerNuevo").classList.add("hidden");
+
+      // Badge conteo + título de la pestaña.
+      $("conteoPend").textContent = pedidos.length;
+      $("conteoPend").classList.toggle("hidden", !pedidos.length || vistaActual !== "cola");
+      document.title = pedidos.length ? `(${pedidos.length}) Pedidos` : "Pedidos — Mostrador";
+
+      if (!pedidos.length) {
+        $("colaLista").innerHTML = `<div class="vacio"><span class="big">✅</span>No hay pedidos pendientes.<br>Todo al día.</div>`;
+        return;
+      }
+
+      // Ordenados por más viejo primero (el backend ya lo hace).
+      $("colaLista").innerHTML = pedidos.map((p) => {
+        const min = minutosDesde(p.creado_en);
+        const u = urgencia(min);
+        const resumen = (p.items || []).map((it) => `${fmtCant(it.cantidad_pedida, it.unidad)} ${esc(it.nombre)}`).join(" · ");
+        const chips = [];
+        if (idsNuevos.has(p.id)) chips.push(`<span class="chip nuevo">NUEVO</span>`);
+        if (p.fuera_de_horario) chips.push(`<span class="chip fuera">⏰ Fuera de horario</span>`);
+        chips.push(`<span class="chip items">${(p.items || []).length} ítems</span>`);
+        return `
+          <div class="pedido-card ${u} ${idsNuevos.has(p.id) ? "nuevo" : ""}" onclick="abrirPedido(${p.id})">
+            <div class="info">
+              <div class="l1">
+                <span class="cliente">${esc(p.cliente_nombre) || "Cliente"}</span>
+                ${chips.join(" ")}
+              </div>
+              <div class="resumen">${resumen || "—"}</div>
+            </div>
+            <div class="edad">
+              <span class="min">${min < 1 ? "recién" : min + " min"}</span>
+              <span class="reloj">${relojLocal(p.creado_en)}</span>
+            </div>
+            <span class="flecha">›</span>
+          </div>`;
+      }).join("");
+    }
+
+    function mostrarBanner(n) {
+      $("bannerTxt").textContent = n === 1 ? "1 pedido nuevo" : n + " pedidos nuevos";
+      $("bannerNuevo").classList.remove("hidden");
+    }
+    function verNuevo() {
+      const primerNuevo = [...idsNuevos][0];
+      if (primerNuevo) abrirPedido(primerNuevo);
+    }
+
+    // ═════════════════════ DETALLE ═════════════════════
+    let pedidoActual = null; // objeto pedido con items
+
+    async function abrirPedido(id) {
+      idsNuevos.delete(id);
+      $("bannerNuevo").classList.toggle("hidden", !idsNuevos.size);
+      setVista("detalle");
+      $("v-detalle").innerHTML = `<div class="cargando">Abriendo pedido…</div>`;
+      try {
+        const { pedido } = await api("/api/pedidos/" + id);
+        pedidoActual = pedido;
+        renderDetalle();
+      } catch (e) {
+        $("v-detalle").innerHTML = `<div class="vacio"><span class="big">⚠️</span>${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderDetalle() {
+      const p = pedidoActual;
+      const min = minutosDesde(p.creado_en);
+      const itemsHtml = p.items.map((it) => renderItem(it)).join("");
+      const pend = p.items.filter((i) => i.estado_item === "pendiente").length;
+      const noDisp = p.items.filter((i) => i.estado_item === "no_disponible").length;
+      const edit = p.items.filter((i) => i.estado_item === "editado").length;
+      let resumenConf = "Se confirman todos tal cual.";
+      if (noDisp || edit || pend < p.items.length) {
+        const partes = [];
+        const ok = p.items.length - noDisp - edit;
+        if (ok) partes.push(`${ok} OK`);
+        if (edit) partes.push(`${edit} editado${edit > 1 ? "s" : ""}`);
+        if (noDisp) partes.push(`${noDisp} sin stock`);
+        resumenConf = partes.join(" · ");
+      }
+      $("v-detalle").innerHTML = `
+        <div class="det-head">
+          <div class="cliente">${esc(p.cliente_nombre) || "Cliente"}</div>
+          <div class="sub">
+            <span>📞 ${esc(p.cliente_telefono) || "—"}</span>
+            <span>🕐 ${relojLocal(p.creado_en)} · hace ${min} min</span>
+            ${p.fuera_de_horario ? `<span class="chip fuera">⏰ Fuera de horario</span>` : ""}
+          </div>
+          ${p.nota ? `<div class="nota">📝 ${esc(p.nota)}</div>` : ""}
+        </div>
+        <div id="itemsDetalle">${itemsHtml}</div>
+        <div class="confirmar-barra">
+          <div class="resumen-conf" id="resumenConf">${resumenConf}</div>
+          <button class="btn-confirmar" id="btnConfPedido" onclick="confirmarPedido()">✅ Confirmar pedido</button>
+        </div>`;
+    }
+
+    function renderItem(it) {
+      const st = it.estado_item;
+      const cant = st === "editado" && it.cantidad_confirmada != null
+        ? `<span style="text-decoration:line-through;opacity:.5;font-size:1rem">${fmtCant(it.cantidad_pedida, it.unidad)}</span> → ${fmtCant(it.cantidad_confirmada, it.unidad)}`
+        : fmtCant(it.cantidad_pedida, it.unidad);
+      const tag = st === "confirmado" ? "✅ Confirmado" : st === "no_disponible" ? "❌ Sin stock" : st === "editado" ? "✏️ Editado" : "";
+      return `
+        <div class="item st-${st}" id="item-${it.id}" data-uni="${it.unidad}" data-pedida="${it.cantidad_pedida}">
+          <div class="fila">
+            <div class="cant">${cant}</div>
+            <div class="nom">${esc(it.nombre)}</div>
+            ${tag ? `<div class="estado-tag">${tag}</div>` : ""}
+          </div>
+          <div class="acciones">
+            <button class="b-ok ${st === "confirmado" ? "sel" : ""}" onclick="accionItem(${it.id},'confirmar')"><span class="ic">✅</span>Confirmar</button>
+            <button class="b-no ${st === "no_disponible" ? "sel" : ""}" onclick="accionItem(${it.id},'no')"><span class="ic">❌</span>No hay</button>
+            <button class="b-ed ${st === "editado" ? "sel" : ""}" onclick="accionItem(${it.id},'editar')"><span class="ic">✏️</span>Editar</button>
+          </div>
+          <div class="zona-extra"></div>
+        </div>`;
+    }
+
+    function itemById(id) { return pedidoActual.items.find((i) => i.id === id); }
+
+    function accionItem(id, accion) {
+      const it = itemById(id);
+      if (!it) return;
+      if (accion === "confirmar") return guardarItem(id, "confirmado");
+      if (accion === "no") return pedirConfirmacionNo(id);
+      if (accion === "editar") return abrirEditor(id);
+    }
+
+    function pedirConfirmacionNo(id) {
+      const zona = $("item-" + id).querySelector(".zona-extra");
+      zona.innerHTML = `
+        <div class="confirmar-no">
+          <p>¿Marcar como sin stock?</p>
+          <div class="row">
+            <button class="si" onclick="guardarItem(${id},'no_disponible')">Sí, no hay</button>
+            <button class="cancel" onclick="cerrarZona(${id})">Cancelar</button>
+          </div>
+        </div>`;
+    }
+
+    function abrirEditor(id) {
+      const it = itemById(id);
+      const base = it.cantidad_confirmada != null ? it.cantidad_confirmada : it.cantidad_pedida;
+      const paso = pasoUnidad(it.unidad);
+      const zona = $("item-" + id).querySelector(".zona-extra");
+      zona.innerHTML = `
+        <div class="editor">
+          <div class="qrow">
+            <button class="step" onclick="stepQ(${id},-1)">−</button>
+            <input type="number" id="q-${id}" value="${base}" step="${paso}" min="0" inputmode="decimal">
+            <span class="uni">${it.unidad === "unidad" ? "u" : it.unidad}</span>
+            <button class="step" onclick="stepQ(${id},1)">＋</button>
+          </div>
+          <div class="row">
+            <button class="g" onclick="guardarEdicion(${id})">Guardar cantidad</button>
+            <button class="c" onclick="cerrarZona(${id})">Cancelar</button>
+          </div>
+        </div>`;
+      $("q-" + id).focus();
+    }
+    function stepQ(id, dir) {
+      const it = itemById(id);
+      const inp = $("q-" + id);
+      let v = parseFloat(inp.value) || 0;
+      v = Math.max(0, +(v + dir * pasoUnidad(it.unidad)).toFixed(2));
+      inp.value = v;
+    }
+    async function guardarEdicion(id) {
+      const v = parseFloat($("q-" + id).value);
+      if (!(v > 0)) return toast("Cantidad inválida", true);
+      const it = itemById(id);
+      if (v === it.cantidad_pedida) return guardarItem(id, "confirmado"); // volvió al original
+      await guardarItem(id, "editado", v);
+    }
+
+    function cerrarZona(id) { const z = $("item-" + id).querySelector(".zona-extra"); if (z) z.innerHTML = ""; }
+
+    async function guardarItem(id, estado_item, cantidad_confirmada) {
+      const it = itemById(id);
+      const prev = { estado_item: it.estado_item, cantidad_confirmada: it.cantidad_confirmada };
+      // Optimista: actualizamos local y reemplazamos la tarjeta del ítem.
+      it.estado_item = estado_item;
+      it.cantidad_confirmada = estado_item === "editado" ? cantidad_confirmada : null;
+      reemplazarItem(id);
+      actualizarResumenConf();
+      try {
+        await api("/api/pedidos/" + pedidoActual.id, { method: "PATCH", body: JSON.stringify({ item: { id, estado_item, cantidad_confirmada } }) });
+      } catch (e) {
+        it.estado_item = prev.estado_item; it.cantidad_confirmada = prev.cantidad_confirmada;
+        reemplazarItem(id); actualizarResumenConf();
+        toast("No se pudo guardar: " + e.message, true);
+      }
+    }
+    function reemplazarItem(id) {
+      const viejo = $("item-" + id);
+      if (!viejo) return;
+      const tmp = document.createElement("div");
+      tmp.innerHTML = renderItem(itemById(id));
+      viejo.replaceWith(tmp.firstElementChild);
+    }
+    function actualizarResumenConf() {
+      const p = pedidoActual;
+      const noDisp = p.items.filter((i) => i.estado_item === "no_disponible").length;
+      const edit = p.items.filter((i) => i.estado_item === "editado").length;
+      const r = $("resumenConf");
+      if (!r) return;
+      if (!noDisp && !edit) { r.textContent = "Se confirman todos tal cual."; return; }
+      const ok = p.items.length - noDisp - edit;
+      const partes = [];
+      if (ok) partes.push(`${ok} OK`);
+      if (edit) partes.push(`${edit} editado${edit > 1 ? "s" : ""}`);
+      if (noDisp) partes.push(`${noDisp} sin stock`);
+      r.textContent = partes.join(" · ");
+    }
+
+    async function confirmarPedido() {
+      const btn = $("btnConfPedido");
+      btn.disabled = true; btn.textContent = "Confirmando…";
+      try {
+        await api("/api/pedidos/" + pedidoActual.id, { method: "PATCH", body: JSON.stringify({ confirmar: true }) });
+        idsConocidos && idsConocidos.delete(pedidoActual.id);
+        toast("✅ Pedido confirmado");
+        irACola();
+      } catch (e) {
+        btn.disabled = false; btn.textContent = "✅ Confirmar pedido";
+        toast("No se pudo confirmar: " + e.message, true);
+      }
+    }
+
+    // ═════════════════════ CATÁLOGO ═════════════════════
+    let catalogoCache = [];
+    async function cargarCatalogo() {
+      $("catalogoLista").innerHTML = `<div class="cargando">Cargando…</div>`;
+      try {
+        const { catalogo } = await api("/api/catalogo");
+        catalogoCache = catalogo;
+        if (!catalogo.length) { $("catalogoLista").innerHTML = `<div class="vacio"><span class="big">🥩</span>Todavía no cargaste productos.</div>`; return; }
+        $("catalogoLista").innerHTML = catalogo.map((c) => `
+          <div class="prod ${c.activo ? "" : "inactivo"}">
+            <div style="flex:1">
+              <div class="nom">${esc(c.nombre)}</div>
+              <div class="meta">${c.unidad}${c.precio != null ? " · $" + c.precio : ""}</div>
+            </div>
+            <button class="toggle ${c.activo ? "on" : ""}" onclick="toggleActivo(${c.id}, ${c.activo ? 0 : 1})">${c.activo ? "Activo" : "Inactivo"}</button>
+            <button class="mini" onclick="abrirFormProducto(${c.id})">✏️</button>
+          </div>`).join("");
+      } catch (e) {
+        if (e.message !== "no autorizado") $("catalogoLista").innerHTML = `<div class="vacio">⚠️ ${esc(e.message)}</div>`;
+      }
+    }
+    async function toggleActivo(id, activo) {
+      try { await api("/api/catalogo/" + id, { method: "PATCH", body: JSON.stringify({ activo: !!activo }) }); cargarCatalogo(); }
+      catch (e) { toast(e.message, true); }
+    }
+    function abrirFormProducto(id) {
+      const p = id ? catalogoCache.find((c) => c.id === id) : null;
+      const modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "modalProd";
+      modal.innerHTML = `
+        <div class="caja">
+          <h2>${p ? "Editar producto" : "Nuevo producto"}</h2>
+          <label>Nombre</label>
+          <input id="fpNombre" value="${p ? esc(p.nombre) : ""}" placeholder="Ej: Entraña" autocomplete="off">
+          <div class="fila2">
+            <div>
+              <label>Unidad</label>
+              <select id="fpUnidad">
+                <option value="kg" ${p && p.unidad === "kg" ? "selected" : ""}>Kilo (kg)</option>
+                <option value="g" ${p && p.unidad === "g" ? "selected" : ""}>Gramos (g)</option>
+                <option value="unidad" ${!p || p.unidad === "unidad" ? "selected" : ""}>Unidad</option>
+              </select>
+            </div>
+            <div>
+              <label>Precio (opcional)</label>
+              <input id="fpPrecio" type="number" inputmode="decimal" value="${p && p.precio != null ? p.precio : ""}" placeholder="$">
+            </div>
+          </div>
+          <div class="acc">
+            <button class="cancelar" onclick="cerrarModal()">Cancelar</button>
+            <button class="guardar" onclick="guardarProducto(${id || 0})">Guardar</button>
+          </div>
+          ${p ? `<button class="borrar" onclick="borrarProducto(${id})">🗑 Borrar producto</button>` : ""}
+        </div>`;
+      document.body.appendChild(modal);
+      modal.addEventListener("click", (e) => { if (e.target === modal) cerrarModal(); });
+      $("fpNombre").focus();
+    }
+    function cerrarModal() { const m = $("modalProd"); if (m) m.remove(); }
+    async function guardarProducto(id) {
+      const nombre = $("fpNombre").value.trim();
+      const unidad = $("fpUnidad").value;
+      const precioRaw = $("fpPrecio").value.trim();
+      if (!nombre) return toast("Poné un nombre", true);
+      const body = { nombre, unidad, precio: precioRaw === "" ? null : Number(precioRaw) };
+      try {
+        if (id) await api("/api/catalogo/" + id, { method: "PATCH", body: JSON.stringify(body) });
+        else await api("/api/catalogo", { method: "POST", body: JSON.stringify(body) });
+        cerrarModal(); cargarCatalogo(); toast("Guardado");
+      } catch (e) { toast(e.message, true); }
+    }
+    async function borrarProducto(id) {
+      if (!confirm("¿Borrar este producto del catálogo?")) return;
+      try { await api("/api/catalogo/" + id, { method: "DELETE" }); cerrarModal(); cargarCatalogo(); toast("Borrado"); }
+      catch (e) { toast(e.message, true); }
+    }
+
+    // ═════════════════════ HORARIO ═════════════════════
+    const NOMBRE_DIA = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    const ORDEN_DIAS = [1, 2, 3, 4, 5, 6, 0]; // Lun..Dom
+    let horarioCache = [];
+    async function cargarHorario() {
+      $("horarioLista").innerHTML = `<div class="cargando">Cargando…</div>`;
+      try {
+        const { horario } = await api("/api/horario");
+        horarioCache = horario;
+        $("horarioLista").innerHTML = ORDEN_DIAS.map((dia) => {
+          const d = horario.find((h) => h.dia === dia) || { dia, abierto: 0, apertura: "", cierre: "" };
+          return `
+            <div class="dia ${d.abierto ? "" : "cerrado"}" id="dia-${dia}">
+              <span class="nombre">${NOMBRE_DIA[dia]}</span>
+              <button class="toggle ${d.abierto ? "on" : ""}" onclick="toggleDia(${dia})">${d.abierto ? "Abierto" : "Cerrado"}</button>
+              <div class="horas">
+                <input type="time" id="ap-${dia}" value="${d.apertura || "09:00"}">
+                <span>a</span>
+                <input type="time" id="ci-${dia}" value="${d.cierre || "13:00"}">
+              </div>
+            </div>`;
+        }).join("");
+      } catch (e) {
+        if (e.message !== "no autorizado") $("horarioLista").innerHTML = `<div class="vacio">⚠️ ${esc(e.message)}</div>`;
+      }
+    }
+    function toggleDia(dia) {
+      const el = $("dia-" + dia);
+      const abierto = el.classList.toggle("cerrado") ? false : true;
+      const btn = el.querySelector(".toggle");
+      btn.classList.toggle("on", abierto);
+      btn.textContent = abierto ? "Abierto" : "Cerrado";
+    }
+    async function guardarHorario() {
+      const dias = ORDEN_DIAS.map((dia) => {
+        const abierto = !$("dia-" + dia).classList.contains("cerrado");
+        return { dia, abierto, apertura: $("ap-" + dia).value, cierre: $("ci-" + dia).value };
+      });
+      try { await api("/api/horario", { method: "PUT", body: JSON.stringify({ horario: dias }) }); toast("Horario guardado"); }
+      catch (e) { toast(e.message, true); }
+    }
+
+    // ═════════════════════ HISTORIAL ═════════════════════
+    async function cargarHistorial() {
+      $("historialLista").innerHTML = `<div class="cargando">Cargando…</div>`;
+      const desde = $("histDesde").value, hasta = $("histHasta").value;
+      const qs = new URLSearchParams();
+      if (desde) qs.set("desde", desde);
+      if (hasta) qs.set("hasta", hasta);
+      try {
+        // Traemos confirmados + cerrados (todo lo que ya no está pendiente).
+        const [c1, c2] = await Promise.all([
+          api("/api/pedidos?estado=confirmado_carnicero&" + qs.toString()),
+          api("/api/pedidos?estado=cerrado&" + qs.toString()),
+        ]);
+        const pedidos = [...(c1.pedidos || []), ...(c2.pedidos || [])].sort((a, b) => (a.creado_en < b.creado_en ? 1 : -1));
+        if (!pedidos.length) { $("historialLista").innerHTML = `<div class="vacio"><span class="big">📋</span>No hay pedidos en ese rango.</div>`; return; }
+        $("historialLista").innerHTML = pedidos.map((p) => {
+          const items = (p.items || []).map((it) => {
+            const marca = it.estado_item === "no_disponible" ? "❌" : it.estado_item === "editado" ? "✏️" : "✅";
+            const cant = it.estado_item === "editado" && it.cantidad_confirmada != null ? fmtCant(it.cantidad_confirmada, it.unidad) : fmtCant(it.cantidad_pedida, it.unidad);
+            return `<div style="display:flex;gap:8px;padding:2px 0;${it.estado_item === "no_disponible" ? "opacity:.55;text-decoration:line-through" : ""}"><span>${marca}</span><span>${cant} ${esc(it.nombre)}</span></div>`;
+          }).join("");
+          const estadoTxt = p.estado === "cerrado" ? "Cerrado" : "Confirmado";
+          return `
+            <div class="det-head" style="margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="cliente" style="font-size:1.1rem;flex:1">${esc(p.cliente_nombre) || "Cliente"}</div>
+                <span class="chip items">${estadoTxt}</span>
+              </div>
+              <div class="sub"><span>${fechaLocal(p.creado_en)} · ${relojLocal(p.creado_en)}</span>${p.fuera_de_horario ? `<span class="chip fuera">⏰ Fuera de horario</span>` : ""}</div>
+              <div style="margin-top:10px">${items}</div>
+            </div>`;
+        }).join("");
+      } catch (e) {
+        if (e.message !== "no autorizado") $("historialLista").innerHTML = `<div class="vacio">⚠️ ${esc(e.message)}</div>`;
+      }
+    }
+
+    // ═════════════════════ Arranque ═════════════════════
+    construirPad(); pintarPin();
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+    api("/api/auth/estado").then((d) => {
+      if (d.autenticado) mostrarApp();
+      else mostrarLogin();
+    }).catch(() => mostrarLogin());
+  </script>
+</body>
+
+</html>

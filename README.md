@@ -1,11 +1,12 @@
 # WhatsBot
 
-Todo lo necesario para salir a vender chatbots de WhatsApp. Tres cosas separadas:
+Todo lo necesario para salir a vender chatbots de WhatsApp. Cuatro cosas separadas:
 
 ```
 landing/   → tu página de venta (la mandás a los clientes)
 demo/      → la demo con LLM que mostrás en la reunión
 bot/       → el chatbot real que le instalás al cliente que compra
+pedidos/   → PWA de mostrador: el carnicero confirma a mano los pedidos que tomó el bot
 ```
 
 Cada carpeta se deploya sola a Vercel (proyectos separados). No dependen entre sí.
@@ -132,6 +133,24 @@ de mensajes), se puede responder directamente por WhatsApp desde ahí, y con
 - Config: `BACKOFFICE_PASSWORD` (la contraseña) y `BACKOFFICE_SESSION_SECRET`
   (string random para firmar la sesión, ej. `openssl rand -hex 32`).
 - Se actualiza sola cada pocos segundos (polling simple, sin websockets).
+
+---
+
+## 4. pedidos/ — PWA de mostrador (confirmar pedidos a mano)
+
+La contraparte **visual** del bot para carnicerías/verdulerías. El bot arma el
+pedido con el cliente pero **nunca lo confirma solo**: lo deja `pendiente` y el
+carnicero decide desde una tablet en el mostrador qué se cumple y qué no
+(confirmar / marcar sin stock / editar cantidad, por ítem). Recién ahí el bot
+retoma la conversación.
+
+- Instalable (PWA: `manifest.json` + service worker), pensada para tablet Android
+  ~10" y también PC. Botones grandes, alto contraste, polling (sin push).
+- Misma base de Turso y mismo estilo que el bot. **Cero dependencias.**
+- El bot crea pedidos con `POST /api/pedidos` (Bearer token); el carnicero entra
+  con un **PIN**.
+
+Todo el detalle (pantallas, API, deploy, env vars) está en `pedidos/README.md`.
 
 ---
 
