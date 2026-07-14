@@ -25,6 +25,8 @@
 //     paso obligatorio que agregue una ronda extra por pedido.
 //   - el historial de la conversación tiene un techo defensivo (podarHistorial) para
 //     que una sesión de demo muy larga no crezca sin límite.
+// Reglas generales para negocios NUEVOS con catálogo/tools reales: ver el checklist
+// al principio de negocios.js.
 //
 // En Vercel (proyecto del demo): Settings → Environment Variables:
 //   ANTHROPIC_API_KEY
