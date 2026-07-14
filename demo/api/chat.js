@@ -6,6 +6,9 @@
 //   - "cine"   → consultar_funcion (precio/disponibilidad reales de una función, API del cine)
 //   - "tobias" → buscar_producto + verificar_disponibilidad + registrar_pedido
 //                (catálogo, disponibilidad y pedidos reales en Turso)
+//   - "pwa"    → crear_pedido (el catálogo NO es una tool: se trae una sola vez por
+//                conversación en api/catalogo.js y se inyecta en el prompt del sistema,
+//                ver negocios.js. Evita que cada turno dispare una ronda extra sin caché.)
 //
 // PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
 // flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
@@ -422,33 +425,12 @@ async function pwaFetch(path, opts = {}) {
   return { status: r.status, data: await r.json().catch(() => ({})) };
 }
 
-const TOOL_VER_CATALOGO = {
-  name: "ver_catalogo",
-  description:
-    "Devuelve la lista de productos ACTIVOS del local (id, nombre, unidad y precio) desde el sistema real. " +
-    "Llamala al empezar a tomar un pedido, o cuando el cliente pregunte qué hay o un precio. " +
-    "El catálogo es corto: traelo una vez y usalo para el resto de la charla. NUNCA inventes productos ni precios: salen de acá.",
-  input_schema: { type: "object", properties: {} },
-};
-
-async function ejecutarVerCatalogo() {
-  if (!PEDIDOS_API_URL) return JSON.stringify({ error: "La app de pedidos no está configurada (falta PEDIDOS_API_URL)." });
-  try {
-    const { status, data } = await pwaFetch("/api/catalogo?activos=1", { method: "GET" });
-    if (status !== 200) return JSON.stringify({ error: "No se pudo leer el catálogo en este momento." });
-    const productos = (data.catalogo || []).map((p) => ({ id: p.id, nombre: p.nombre, unidad: p.unidad, precio: p.precio }));
-    return JSON.stringify({ productos, cantidad: productos.length });
-  } catch (e) {
-    return JSON.stringify({ error: "No se pudo leer el catálogo en este momento." });
-  }
-}
-
 const TOOL_CREAR_PEDIDO = {
   name: "crear_pedido",
   description:
     "Registra el pedido en el sistema del local con estado PENDIENTE, para que una PERSONA lo confirme desde la app del mostrador. " +
     "NO es una confirmación final: el bot no cierra la venta ni cobra; el carnicero revisa disponibilidad y confirma. " +
-    "Confirmá los ítems y cantidades con el cliente ANTES de llamar. En cada ítem copiá el 'nombre' y la 'unidad' EXACTOS que te dio ver_catalogo, " +
+    "Confirmá los ítems y cantidades con el cliente ANTES de llamar. En cada ítem copiá el 'nombre' y la 'unidad' EXACTOS del catálogo del prompt, " +
     "y poné su 'id' en 'catalogo_item_id'. Devuelve el número de pedido.",
   input_schema: {
     type: "object",
@@ -462,8 +444,8 @@ const TOOL_CREAR_PEDIDO = {
         items: {
           type: "object",
           properties: {
-            catalogo_item_id: { type: "integer", description: "id del producto (de ver_catalogo). Omitilo solo si es un producto suelto que no está en el catálogo." },
-            nombre: { type: "string", description: "Nombre del producto, igual al que te dio ver_catalogo." },
+            catalogo_item_id: { type: "integer", description: "id del producto (del catálogo del prompt). Omitilo solo si es un producto suelto que no está en el catálogo." },
+            nombre: { type: "string", description: "Nombre del producto, igual al del catálogo del prompt." },
             cantidad_pedida: { type: "number", description: "Cantidad pedida (ej: 1, 3, 500)." },
             unidad: { type: "string", description: "Unidad: 'kg', 'g' o 'unidad', igual a la del catálogo." },
           },
@@ -521,7 +503,7 @@ async function ejecutarCrearPedido(input) {
 function toolsPara(agente, cineId) {
   if (agente === "cine" && cineId) return [TOOL_CONSULTAR_FUNCION];
   if (agente === "tobias") return [TOOL_BUSCAR_PRODUCTO, TOOL_VERIFICAR_DISPONIBILIDAD, TOOL_REGISTRAR_PEDIDO];
-  if (agente === "pwa") return [TOOL_VER_CATALOGO, TOOL_CREAR_PEDIDO];
+  if (agente === "pwa") return [TOOL_CREAR_PEDIDO];
   return undefined;
 }
 async function ejecutarTool(name, input, ctx) {
@@ -529,7 +511,6 @@ async function ejecutarTool(name, input, ctx) {
   if (name === "buscar_producto") return ejecutarBuscarProducto(input);
   if (name === "verificar_disponibilidad") return ejecutarVerificarDisponibilidad(input);
   if (name === "registrar_pedido") return ejecutarRegistrarPedido(input);
-  if (name === "ver_catalogo") return ejecutarVerCatalogo();
   if (name === "crear_pedido") return ejecutarCrearPedido(input);
   return JSON.stringify({ error: "Herramienta desconocida." });
 }

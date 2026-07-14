@@ -310,8 +310,11 @@
       NEGOCIO.chips.forEach(c => { const el = document.createElement('button'); el.className = 'chip'; el.textContent = c; el.onclick = () => { inp.value = c; enviar(); }; chipsEl.appendChild(el); });
     }
 
-    // Prompt del sistema. Para un cine con cartelera en vivo (cineId), la
-    // traemos una sola vez y la inyectamos en promptBase. Para el resto, es fijo.
+    // Prompt del sistema. Para un cine con cartelera en vivo (cineId) o un negocio
+    // "pwa" con catálogo real, lo traemos una sola vez por conversación y lo
+    // inyectamos en promptBase (así queda fijo el resto de la charla: se beneficia
+    // del prompt caching del server en vez de pedirse de nuevo en cada turno).
+    // Para el resto, el prompt es fijo de entrada.
     let _systemPromise = null;
     function getSystem() {
       if (_systemPromise) return _systemPromise;
@@ -319,6 +322,11 @@
         _systemPromise = construirCartelera(NEGOCIO.cineId)
           .then(cart => NEGOCIO.promptBase.replace('{{CARTELERA}}', cart))
           .catch(() => NEGOCIO.promptBase.replace('{{CARTELERA}}', 'CARTELERA: no disponible en este momento. Si te preguntan por horarios, pedí disculpas y ofrecé derivar la consulta a una persona del cine.'));
+      } else if (NEGOCIO.agente === 'pwa') {
+        _systemPromise = fetch(`/api/catalogo?negocio=${NEGOCIO_SLUG}`)
+          .then(r => r.json())
+          .then(d => NEGOCIO.promptBase.replace('{{CATALOGO}}', d.texto || 'CATÁLOGO: no disponible en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'))
+          .catch(() => NEGOCIO.promptBase.replace('{{CATALOGO}}', 'CATÁLOGO: no se pudo cargar en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'));
       } else {
         _systemPromise = Promise.resolve(NEGOCIO.prompt);
       }
