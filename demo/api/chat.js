@@ -1,5 +1,13 @@
-// Proxy serverless: recibe {system, messages, agente, cineId} del navegador y llama a Claude.
-// La API key NUNCA sale al cliente: vive en la variable de entorno ANTHROPIC_API_KEY.
+// Proxy serverless: recibe {system, messages, agente, cineId} del navegador y llama al LLM
+// vía OpenRouter (openrouter.ai) — un solo endpoint OpenAI-compatible con acceso a Anthropic,
+// OpenAI, Google y otros proveedores. La API key NUNCA sale al cliente: vive en la variable
+// de entorno OPENROUTER_API_KEY.
+//
+// Por qué OpenRouter y no pegarle directo a Anthropic: para poder cambiar de modelo/proveedor
+// (por costo, por cliente) cambiando MODEL_BARATO/MODEL_EXPERTO/MODEL_ROUTER (env vars, más
+// abajo) sin tocar código ni redeployar. El resto de este archivo (loop de tools, ejecutarTool,
+// registro de costos) sigue escrito contra el shape de la Anthropic Messages API — la sección
+// "LLM: OpenRouter" es la única parte que traduce ida y vuelta.
 //
 // Según "agente" se habilitan HERRAMIENTAS (tool use) y el servidor las ejecuta en un
 // loop, devolviéndole el resultado al modelo hasta que produce la respuesta final:
@@ -12,11 +20,10 @@
 //
 // PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
 // flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
-// Hay DOS breakpoints de caché por request:
-//   1) al final del system → cachea el prefijo estable (tools + system).
-//   2) al final del ÚLTIMO mensaje de la conversación → cachea también el historial
-//      acumulado (incluidos resultados de tools de rondas anteriores), que es lo que
-//      realmente crece dentro de un mismo turno (loop de herramientas) y entre turnos.
+// Un solo breakpoint de caché (system+tools) vía OpenRouter → cache_control de Anthropic.
+// Ver la nota en la sección "LLM: OpenRouter" sobre por qué no hay un segundo breakpoint
+// como antes, y cómo confirmar si el caché realmente está pegando (cacheReadTokens en
+// DemoChatLog — no asumir que funciona solo porque no tira error).
 // CONTROL DE COSTOS ADICIONAL:
 //   - buscar_producto devuelve menos resultados por defecto (se reenvían en cada ronda
 //     siguiente del loop, así que menos filas = menos tokens repetidos).
@@ -29,7 +36,11 @@
 // al principio de negocios.js.
 //
 // En Vercel (proyecto del demo): Settings → Environment Variables:
-//   ANTHROPIC_API_KEY
+//   OPENROUTER_API_KEY
+//   (Opcional) MODEL_BARATO, MODEL_EXPERTO, MODEL_ROUTER — para pivotear de modelo/proveedor
+//     sin tocar código. Formato: slug de OpenRouter, ej "openai/gpt-4o-mini" o
+//     "google/gemini-2.5-flash-lite". Si usás un modelo nuevo, sumalo también a PRECIOS
+//     (más abajo) para que el costo logueado en DemoChatLog sea exacto.
 //   Para Tobías: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN (catálogo/pedidos reales)
 //   Para el registro de conversaciones del demo (base APARTE, no la de Tobías):
 //     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
@@ -48,9 +59,11 @@ const persistenciaActiva = () => !!process.env.LOG_TURSO_DATABASE_URL;
 //   - MODEL_EXPERTO: solo lo que pide criterio (reclamos, pagos/entregas, temas delicados,
 //     pedir hablar con una persona, ambigüedad). ~15%.
 // El clasificador corre en el modelo barato y cuesta centavos.
-const MODEL_BARATO = "claude-haiku-4-5";
-const MODEL_EXPERTO = "claude-sonnet-4-6";
-const MODEL_ROUTER = "claude-haiku-4-5";
+// Overrideables por env var (ver header del archivo) — así se cambia de modelo/proveedor
+// sin tocar código. Slugs de OpenRouter: "proveedor/modelo".
+const MODEL_BARATO = process.env.MODEL_BARATO || "anthropic/claude-haiku-4.5";
+const MODEL_EXPERTO = process.env.MODEL_EXPERTO || "anthropic/claude-sonnet-4.6";
+const MODEL_ROUTER = process.env.MODEL_ROUTER || "anthropic/claude-haiku-4.5";
 const MAX_TOOL_ROUNDS = 5;
 
 // ─────────────────────────── Herramientas: CINE ───────────────────────────
@@ -517,58 +530,136 @@ async function ejecutarTool(name, input, ctx) {
   return JSON.stringify({ error: "Herramienta desconocida." });
 }
 
-// Prompt caching: con cache=true, el prompt del sistema se manda como un bloque de
-// texto con cache_control ephemeral. El orden de render es tools → system, así que un
-// solo breakpoint al final del system cachea TODO el prefijo estable (tools + system).
-// Ese prefijo se reusa en cada ronda del loop de herramientas y en cada turno de la
-// conversación (caché de 5 min), en vez de reprocesarse como "no_cache" cada vez.
-//   Nota: en Haiku 4.5 el mínimo cacheable es ~4096 tokens. Si el prefijo es más corto
-//   (p. ej. Tobías sin cartelera), simplemente no se escribe caché: no hay error ni
-//   costo extra, y el ahorro aparece solo cuando el prefijo supera ese umbral
-//   (cine con cartelera, o conversaciones largas).
-function armarSystem(system, cache) {
-  const txt = system || "";
-  if (!cache || !txt) return txt;
-  return [{ type: "text", text: txt, cache_control: { type: "ephemeral" } }];
+// ─────────────────────────── LLM: OpenRouter ───────────────────────────
+// Todo el resto de este archivo (loop de tools, ejecutarTool, sumarUsage, registrarLog)
+// está escrito contra el shape de la Anthropic Messages API: content = [{type:"text",...}
+// | {type:"tool_use",...}], stop_reason, usage.{input_tokens,output_tokens,cache_read_...}.
+// En vez de reescribir esa lógica para cada proveedor, esta sección la deja intacta y
+// traduce en el borde: arma el request en formato chat.completions (lo que habla
+// OpenRouter, compatible con OpenAI) y aplana la respuesta de vuelta al shape de Anthropic
+// de siempre. Para cambiar de modelo/proveedor alcanza con cambiar MODEL_BARATO/
+// MODEL_EXPERTO/MODEL_ROUTER (arriba) — nunca hace falta tocar el loop de tools.
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+// Las tools de este archivo están definidas en formato Anthropic (name, description,
+// input_schema). El formato de OpenAI/OpenRouter es {type:"function", function:{...}}.
+function toolsAFormatoOpenAI(tools) {
+  if (!tools) return undefined;
+  return tools.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
 }
 
-// Segundo breakpoint: al final del ÚLTIMO mensaje de la conversación. Esto es lo que
-// más importa en la práctica: el loop de herramientas reenvía TODA la conversación
-// (incluidos resultados de tools de rondas anteriores) en cada ronda, y cada turno
-// reenvía todo el historial. Con este marker, la ronda/turno siguiente lee ese prefijo
-// a ~0.1x en vez de precio completo, en vez de solo cachear el system+tools (que en
-// Tobías casi nunca llega al mínimo cacheable por sí solo).
-// cache_control solo puede ir en un content block, no en un string plano: si el último
-// mensaje tiene content string se lo envuelve en un bloque de texto.
-function conCacheEnUltimoMensaje(messages) {
-  if (!messages || !messages.length) return messages;
-  const ultimo = messages[messages.length - 1];
-  const content =
-    typeof ultimo.content === "string"
-      ? [{ type: "text", text: ultimo.content }]
-      : ultimo.content.map((b) => ({ ...b }));
-  if (!content.length) return messages;
-  content[content.length - 1] = { ...content[content.length - 1], cache_control: { type: "ephemeral" } };
-  return [...messages.slice(0, -1), { role: ultimo.role, content }];
+// Traduce `messages` (que el resto del archivo arma y sigue manipulando en formato
+// Anthropic: tool_use en el content del assistant, tool_result como content del user)
+// al formato chat.completions: tool_calls en el mensaje del assistant, y un mensaje
+// role:"tool" aparte por cada resultado.
+function mensajesAFormatoOpenAI(messages) {
+  const out = [];
+  for (const m of messages) {
+    if (m.role === "assistant") {
+      const bloques = Array.isArray(m.content) ? m.content : [{ type: "text", text: String(m.content || "") }];
+      const texto = bloques.filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      const toolUse = bloques.filter((b) => b.type === "tool_use");
+      const msg = { role: "assistant", content: texto || null };
+      if (toolUse.length) {
+        msg.tool_calls = toolUse.map((b) => ({
+          id: b.id,
+          type: "function",
+          function: { name: b.name, arguments: JSON.stringify(b.input || {}) },
+        }));
+      }
+      out.push(msg);
+    } else if (typeof m.content === "string") {
+      out.push({ role: "user", content: m.content });
+    } else {
+      // content es un array de bloques del usuario: tool_result (resultado de una tool
+      // ejecutada en la ronda anterior) o texto suelto.
+      for (const b of m.content) {
+        if (b.type === "tool_result") {
+          out.push({
+            role: "tool",
+            tool_call_id: b.tool_use_id,
+            content: typeof b.content === "string" ? b.content : JSON.stringify(b.content),
+          });
+        } else if (b.type === "text") {
+          out.push({ role: "user", content: b.text });
+        }
+      }
+    }
+  }
+  return out;
 }
 
-async function llamarClaude({ system, messages, tools, model, maxTokens, cache = false }) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+// Prompt caching: con cache=true, el system va como content-part con cache_control
+// ephemeral (formato que OpenRouter reenvía a Anthropic). Solo hay UN breakpoint (system
+// + tools) — el segundo breakpoint que existía antes (al final del último mensaje) no se
+// replica acá: requeriría anidar cache_control en mensajes role:"tool", que no está
+// soportado de forma pareja entre proveedores. cacheReadTokens en DemoChatLog es la señal
+// para confirmar si esto realmente está cacheando — no asumirlo solo porque no da error.
+function systemAFormatoOpenAI(system, cache) {
+  if (!system) return null;
+  if (!cache) return { role: "system", content: system };
+  return { role: "system", content: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] };
+}
+
+// Traduce la respuesta de OpenRouter (chat.completions) de vuelta al shape de Anthropic
+// que consume el resto del archivo.
+function respuestaDesdeOpenAI(data) {
+  const choice = (data.choices || [])[0] || {};
+  const msg = choice.message || {};
+  const content = [];
+  if (msg.content) content.push({ type: "text", text: msg.content });
+  for (const tc of msg.tool_calls || []) {
+    let input = {};
+    try {
+      input = JSON.parse(tc.function?.arguments || "{}");
+    } catch (e) {
+      // input mal formado del modelo: lo dejamos vacío, la tool va a devolver un error claro.
+    }
+    content.push({ type: "tool_use", id: tc.id, name: tc.function?.name, input });
+  }
+  const STOP_REASON = { stop: "end_turn", tool_calls: "tool_use", length: "max_tokens", content_filter: "refusal" };
+  const usage = data.usage || {};
+  const cacheRead = usage.prompt_tokens_details?.cached_tokens || 0;
+  return {
+    content,
+    stop_reason: STOP_REASON[choice.finish_reason] || choice.finish_reason || "end_turn",
+    usage: {
+      // OpenRouter reporta prompt_tokens como el total (incluye lo cacheado); Anthropic
+      // reporta input_tokens como el resto SIN cachear. Restamos para no duplicar costo.
+      input_tokens: Math.max((usage.prompt_tokens || 0) - cacheRead, 0),
+      output_tokens: usage.completion_tokens || 0,
+      cache_read_input_tokens: cacheRead,
+      // OpenRouter no expone tokens de escritura de caché en su usage unificado (a
+      // diferencia del cache_creation_input_tokens nativo de Anthropic).
+      cache_creation_input_tokens: 0,
+    },
+  };
+}
+
+async function llamarLLM({ system, messages, tools, model, maxTokens, cache = false }) {
+  const cuerpo = {
+    model: model || MODEL_EXPERTO,
+    max_tokens: maxTokens || 1000,
+    messages: [systemAFormatoOpenAI(system, cache), ...mensajesAFormatoOpenAI(messages)].filter(Boolean),
+    ...(tools ? { tools: toolsAFormatoOpenAI(tools) } : {}),
+  };
+  const r = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
+      Authorization: "Bearer " + (process.env.OPENROUTER_API_KEY || ""),
+      // Recomendados por OpenRouter para atribución en su dashboard; no son obligatorios.
+      "HTTP-Referer": "https://whatsbot-demo.vercel.app",
+      "X-Title": "WhatsBot Demo",
     },
-    body: JSON.stringify({
-      model: model || MODEL_EXPERTO,
-      max_tokens: maxTokens || 1000,
-      system: armarSystem(system, cache),
-      messages: cache ? conCacheEnUltimoMensaje(messages) : messages,
-      ...(tools ? { tools } : {}),
-    }),
+    body: JSON.stringify(cuerpo),
   });
-  return { status: r.status, data: await r.json() };
+  const data = await r.json();
+  if (r.status !== 200) return { status: r.status, data };
+  return { status: r.status, data: respuestaDesdeOpenAI(data) };
 }
 
 // Router: clasifica el último mensaje del cliente en 3 categorías.
@@ -589,7 +680,7 @@ async function clasificar(messages) {
     "- 'derivar': una queja o reclamo, un problema con un pago/compra/entrega, o un pedido EXPLÍCITO de hablar con una persona.\n" +
     "Respondé SOLO con una palabra, en minúscula: simple, experto o derivar.";
   try {
-    const { status, data } = await llamarClaude({
+    const { status, data } = await llamarLLM({
       system: instruccion,
       messages: ultimos,
       model: MODEL_ROUTER,
@@ -609,13 +700,20 @@ async function clasificar(messages) {
 }
 
 // ─────────────────────────── Costos y registro ───────────────────────────
-// Precios por millón de tokens (USD). El cache read se cobra ~10× más barato.
+// Precios por millón de tokens (USD). El cache read se cobra ~10× más barato (solo aplica
+// a modelos Anthropic vía OpenRouter; el resto de los proveedores no reportan cache_read
+// en su usage unificado, así que cacheRead siempre da 0 para ellos).
+// Si pivoteás MODEL_BARATO/EXPERTO/ROUTER (arriba) a un modelo que no está acá, agregalo
+// para que el costo logueado en DemoChatLog sea exacto — si no, cae al precio de Haiku 4.5
+// como estimación conservadora.
 const PRECIOS = {
-  "claude-haiku-4-5": { in: 1, out: 5 },
-  "claude-sonnet-4-6": { in: 3, out: 15 },
+  "anthropic/claude-haiku-4.5": { in: 1, out: 5 },
+  "anthropic/claude-sonnet-4.6": { in: 3, out: 15 },
+  "openai/gpt-4o-mini": { in: 0.15, out: 0.6 },
+  "google/gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
 };
 function costoUsd(model, usage) {
-  const p = PRECIOS[model] || PRECIOS[MODEL_EXPERTO];
+  const p = PRECIOS[model] || PRECIOS["anthropic/claude-haiku-4.5"];
   const inNoCache = usage.input_tokens || 0;
   // Escritura de caché (~1.25x) y lectura (~0.1x): ambas hay que sumarlas o el costo
   // logueado queda subestimado apenas el caché empieza a escribir.
@@ -755,7 +853,7 @@ export default async function handler(req, res) {
 
     // Loop de herramientas: sin tools, sale en la 1ª vuelta.
     for (let ronda = 0; ronda <= MAX_TOOL_ROUNDS; ronda++) {
-      const { status, data } = await llamarClaude({ system, messages: convo, tools, model, cache: true });
+      const { status, data } = await llamarLLM({ system, messages: convo, tools, model, cache: true });
       if (status !== 200) return res.status(status).json(data);
       sumarUsage(handlerUsage, data.usage);
       if (data.stop_reason !== "tool_use") {
@@ -777,7 +875,7 @@ export default async function handler(req, res) {
 
     // Se agotaron las rondas: respuesta final sin herramientas.
     if (!finalData) {
-      const { status, data } = await llamarClaude({ system, messages: convo, model, cache: true });
+      const { status, data } = await llamarLLM({ system, messages: convo, model, cache: true });
       if (status !== 200) return res.status(status).json(data);
       sumarUsage(handlerUsage, data.usage);
       finalData = data;
