@@ -279,12 +279,17 @@ REGLAS:
   // FELER BROKERS INMOBILIARIA — venta, alquiler (incluido temporario) y
   // tasaciones en San Miguel de Tucumán. Sin agente/tools: el listado de
   // abajo es una FOTO estática (sacada de inmobiliariafeler.com.ar/Venta
-  // y /Alquiler el 14/07) pegada directo en el prompt, no una conexión
-  // en vivo — mismo patrón que la cartelera hardcodeada de Sunstar. Por
-  // eso el bot solo puede ofrecer lo que está en esta lista y siempre
-  // aclara que un asesor confirma disponibilidad/precio final antes de
-  // cerrar nada. Si se vuelve a cargar, conviene re-scrapear ambas URLs
-  // y reemplazar el bloque LISTADO de abajo entero.
+  // y /Alquiler el 14/07, siguiendo la paginación AJAX de esas páginas —
+  // "?p=2" — hasta agotar los "N Resultados de búsqueda" que la propia
+  // web reporta: 38 en venta, 26 en alquiler) pegada directo en el
+  // prompt, no una conexión en vivo — mismo patrón que la cartelera
+  // hardcodeada de Sunstar. Por eso el bot solo puede ofrecer lo que
+  // está en esta lista y siempre aclara que un asesor confirma
+  // disponibilidad/precio final antes de cerrar nada. Si se vuelve a
+  // cargar: la página 1 de /Venta y /Alquiler NO alcanza, son parciales
+  // (renderizan solo 20 y se completan con scroll infinito) — hay que
+  // seguir la paginación hasta que un "p=" nuevo devuelva 0 resultados,
+  // y recién ahí reemplazar el bloque LISTADO de abajo entero.
   // ─────────────────────────────────────────────────────────────
   feler: {
     nombre: "Feler Brokers Inmobiliaria",
@@ -324,42 +329,72 @@ VENTA — Departamentos:
 - 5 amb, Virgen de la Merced al 600, Barrio Norte — 243,49 m² · precio a consultar
 - 2 amb, Virgen de la Merced al 600, Capital — 72,96 m² · precio a consultar
 - 2 amb, Lavalle al 1100, Capital — USD 53.000 · 50,88 m²
+- 4 amb, Av. Salta al 200, Capital — USD 75.000 · 81,91 m²
+- Laprida al 400, Capital — USD 350.000 · 219 m²
+- 5 amb, Corrientes al 500, Barrio Norte — USD 80.000 (esta misma unidad también está en alquiler, $650.000/mes)
+- 1 dorm, Laprida 1289 1º A, Capital — USD 30.000 · 46 m² (esta misma unidad también está en alquiler, $380.000/mes)
+- 2 dorm, Laprida 1289 3º piso, Capital — USD 45.000 · 84 m²
 
 VENTA — Casas:
 - 4 dorm, Pcia. de la Rioja al 800, Capital — USD 220.000 · 240 m²
 - 3 dorm, Av. Solano Vera al 2900, San Pablo (Lules) — USD 250.000
 - 5 dorm, Pedro de Valdivia al 3300, Capital — USD 160.000
+- 3 dorm, San Juan esq. Paso de los Andes, Villa Luján — USD 50.000
+- San Martín al 200, Microcentro — USD 250.000 · 300 m²
+- 2 dorm, Praderas del Nogal, Los Nogales (Tafí Viejo) — USD 120.000 · 169 m²
+- Bolívar al 300, Barrio Sur — USD 155.000 · 236 m²
+- San Lorenzo al 1000, Capital — USD 280.000 · 292 m²
+- 2 dorm, Loma Linda, Tafí Viejo — USD 80.000
 
-VENTA — Otros:
+VENTA — Otros (terrenos, locales, oficinas, galpones):
 - Terreno, Ruta 9 km 1308, Los Nogales (Tafí Viejo) — USD 26.000 · 534 m²
 - Galpón, Venezuela al 800, Capital — USD 355.000 · 610 m²
 - Local, 25 de Mayo al 100, Capital — precio a consultar
 - Local, Mendoza al 1600, Capital — USD 180.000
+- Local, Av. Nicolás Avellaneda al 700, Capital — USD 60.000 · 38 m²
+- Local, Ayacucho al 500, Barrio Sur — USD 85.000
+- Local, La Rioja al 100, Capital — precio a consultar
+- Oficina 5 amb, General Paz al 500, Barrio Sur — USD 170.000 · 123 m²
+- Local frente, Las Piedras 2061, Capital — USD 80.000 · 229 m²
+- Local, San Juan y Monteagudo, Zona Norte — USD 140.000 · 35 m²
+- Terreno, Country Loma Linda, Tafí Viejo — precio a consultar · 960 m²
 
-ALQUILER:
+ALQUILER — Departamentos:
+- 7 amb, Santa Fé al 400, Capital — $2.800.000 · 284,89 m²
+- 2 amb PB, San Juan 28, Barrio Norte — $700.000
+- 2 amb, Congreso al 500, Barrio Sur — $310.000 · 30 m²
+- 5 amb, Corrientes al 500, Barrio Norte — $650.000/mes (esta misma unidad también está en venta, USD 80.000)
+- 1 dorm, Laprida 1289 1º A, Capital — $380.000/mes · 46 m² (esta misma unidad también está en venta, USD 30.000)
+
+ALQUILER — Casas:
+- 4 dorm, Corrientes al 500, Barrio Norte — $8.000.000 (unidad distinta al depto de la misma altura de arriba)
+- 5 dorm, Av. Aconquija 1800, Yerba Buena — $1.800.000
+- 4 dorm, Corrientes al 300, Capital — $1.200.000 · 170 m²
+
+ALQUILER — Oficinas:
+- 5 amb, Maipú 41, Capital — $600.000 · 108 m²
+- 9 amb, Maipú 35, Microcentro — $1.500.000 · 215 m²
+
+ALQUILER — Locales, galpones y otros:
 - Local PB, Chacabuco 77, Barrio Sur — $1.500.000
-- Depto 7 amb, Santa Fé al 400, Capital — $2.800.000 · 284,89 m²
 - Local, Santiago al 600, Capital — $950.000
-- Depto 2 amb PB, San Juan 28, Barrio Norte — $700.000
-- Oficina 5 amb, Maipú 41, Capital — $600.000 · 108 m²
-- Oficina 9 amb, Maipú 35, Microcentro — $1.500.000 · 215 m²
 - Local frente, Rivadavia al 400, Capital — $450.000
 - Galpón, Venezuela al 800, Capital — $2.700.000 · 610 m²
 - Local, Av. Roca 300, Barrio Sur — $680.000 · 33,65 m²
 - Local, Buenos Aires al 300, Capital — $2.800.000
-- Depto 2 amb, Congreso al 500, Barrio Sur — $310.000 · 30 m²
 - Local, Maipú al 200, Microcentro — $2.000.000 · 54,60 m²
 - Local esquina, Santiago y Junín, Barrio Norte — $5.000.000 · 260 m²
 - Local, Av. Roca al 800, Barrio Sur — precio a consultar
-- Casa 4 dorm, Corrientes 500, Barrio Norte — $8.000.000
 - Local, Av. Juan B. Justo 1200, Capital — $750.000
 - Galpón, Av. Colón 600, Ciudadela — precio a consultar
 - Local, Av. Alem 600, Ciudadela — $2.200.000
-- Local, Crisóstomo Álvarez 700, Capital — $1.100.000
-- Casa 5 dorm, Av. Aconquija 1800, Yerba Buena — $1.800.000
+- Local, Crisóstomo Álvarez al 700, Capital — $1.100.000 (2 unidades disponibles a este precio)
+- Local, Rivadavia al 100, Centro — $2.500.000
+- Local, Av. Circunvalación al 1200, Capital — $950.000 · 210 m²
 
 CÓMO USAR EL LISTADO:
 - Es una foto de un momento dado, no un stock en vivo: las propiedades pueden haberse vendido/alquilado o cambiado de precio. Ofrecé lo que matchea la búsqueda del cliente (operación, tipo, zona, presupuesto) pero SIEMPRE aclará que un asesor confirma disponibilidad y precio final antes de avanzar.
+- Algunas propiedades están publicadas para venta Y alquiler a la vez (están marcadas arriba) — si el cliente pregunta por una y no aclaró la operación, preguntale cuál busca.
 - NUNCA inventes una propiedad, dirección, precio o m² que no esté en esta lista — si nada matchea, decilo con sinceridad y ofrecé derivar para que un asesor le pase opciones nuevas.
 - Para tasaciones: no hay listado que ofrecer, pedí dirección y datos básicos de la propiedad y derivá.
 - Si pregunta por una propiedad puntual que vio en la web o redes y no está en esta lista, pedile el link o la referencia y aclarale que un asesor se la confirma.
