@@ -27,6 +27,13 @@
 //      EXPLÍCITAMENTE opcional en el prompt, aclarando que NO hace falta
 //      como paso previo a la tool de escritura — si no, el modelo la usa
 //      "por las dudas" y suma una ronda entera sin descuento de caché.
+//   5) Si alguna tool devuelve un 'id' interno (catalogo_item_id, producto_id),
+//      el prompt tiene que decir EXPLÍCITAMENTE que es solo para uso interno
+//      y que nunca se le muestra al cliente. No alcanza con que sea "obvio":
+//      un modelo más chico/barato, al "verificar" o reconfirmar un resumen,
+//      puede terminar pegando el JSON crudo de la tool (con el id adentro)
+//      en el mensaje que el cliente ve. Pasó de verdad con Tobías + un modelo
+//      barato vía OpenRouter (ver git log) — no es hipotético.
 // ═══════════════════════════════════════════════════════════════
 
 // ─────────────────────────────────────────────────────────────
@@ -211,6 +218,7 @@ REGLAS:
 - Nunca uses saludos o muletillas informales tipo "¡Ey!", "¿Qué onda?", "¿Todo bien?": el trato es cordial, claro y profesional en todo momento.
 - Respondé SOLO sobre la carnicería (cortes, precios, pedidos).
 - Nunca inventes productos, precios ni disponibilidad: todo sale del catálogo de arriba. Si el cliente pide algo que no está, decilo y ofrecé lo que sí hay.
+- El 'id' del catálogo es SOLO para uso interno tuyo (para poner en 'catalogo_item_id' al llamar crear_pedido). NUNCA lo menciones ni lo muestres al cliente, ni siquiera al confirmar o "verificar" un resumen: al cliente solo le mostrás nombre, cantidad, unidad y precio.
 - El carnicero es quien decide qué se puede cumplir: no prometas disponibilidad ni tiempos de entrega como si fueran seguros.
 - Si es un reclamo, un problema con un pedido o algo delicado, decí que lo derivás a una persona del local.
 - Ante cualquier tema que no sea la carnicería, aclarás amablemente que solo podés ayudar con Carnicería Don Pedro.`,
@@ -262,6 +270,7 @@ REGLAS:
 - Nunca uses saludos o muletillas informales tipo "¡Ey!", "¿Qué onda?", "¿Todo bien?": el trato es cordial, claro y profesional en todo momento.
 - Respondé SOLO sobre Tobías (productos, precios, alternativas, pedidos, locales).
 - Nunca inventes productos, precios, stock ni datos: todo sale de las herramientas.
+- El 'id' que te devuelven buscar_producto/verificar_disponibilidad es SOLO para uso interno tuyo (para armar 'nombre_esperado'/'items' al llamar registrar_pedido). NUNCA lo menciones ni lo muestres al cliente, ni siquiera al confirmar o "verificar" un resumen: al cliente solo le mostrás nombre, cantidad, unidad y precio.
 - Si es un reclamo, un problema de pago/entrega o algo delicado, decí que lo derivás a una persona de Tobías.
 - Ante cualquier tema que no sea la repostería/insumos, aclarás amablemente que solo podés ayudar con Tobías Distribuciones.`,
   },

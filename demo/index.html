@@ -310,6 +310,21 @@
       NEGOCIO.chips.forEach(c => { const el = document.createElement('button'); el.className = 'chip'; el.textContent = c; el.onclick = () => { inp.value = c; enviar(); }; chipsEl.appendChild(el); });
     }
 
+    // CAPA 0 (ahorro de costos): si el PRIMER mensaje del cliente es un saludo
+    // "puro" (sin ningún pedido/pregunta enganchado), respondemos con un menú
+    // numerado armado con los chips del negocio, sin llamar a /api/chat — así
+    // ni el clasificador barato ni el modelo principal gastan tokens en un
+    // "Hola" que no trae información. Cualquier otra cosa (aunque empiece con
+    // "hola, ...") sigue el camino normal.
+    function esSaludoPuro(txt) {
+      const limpio = txt.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[¡!¿?.,]/g, '').trim();
+      return /^(hola+s?|holis|buenas|buen[oa]s?\s*(dias?|tardes?|noches?)?|que tal|hey+|ey+|buen dia)$/.test(limpio);
+    }
+    function menuSaludo() {
+      return '¿En qué te ayudo? Elegí una opción o escribime directamente:\n\n' +
+        NEGOCIO.chips.map((c, i) => `${i + 1}️⃣ ${c}`).join('\n');
+    }
+
     // Prompt del sistema. Para un cine con cartelera en vivo (cineId) o un negocio
     // "pwa" con catálogo real, lo traemos una sola vez por conversación y lo
     // inyectamos en promptBase (así queda fijo el resto de la charla: se beneficia
@@ -402,6 +417,19 @@
       inp.value = '';
       burbuja(txt, 'out');
       history.push({ role: 'user', content: txt });
+
+      const esPrimerMensaje = history.filter(m => m.role === 'user').length === 1;
+      if (esPrimerMensaje && esSaludoPuro(txt)) {
+        typing(true);
+        setTimeout(() => {
+          typing(false);
+          const menu = menuSaludo();
+          burbuja(menu, 'in');
+          history.push({ role: 'assistant', content: menu });
+        }, 500);
+        return;
+      }
+
       responder();
     }
     send.onclick = enviar;
