@@ -20,8 +20,8 @@
     // Id único de esta conversación (para agrupar el resumen en el panel).
     const CONV_ID = (self.crypto && crypto.randomUUID) ? crypto.randomUUID()
       : (Date.now() + '-' + Math.random().toString(36).slice(2));
-    if (_slug && !NEGOCIOS[_slug]) {
-      // Clave inválida: mandamos al menú para elegir uno válido.
+    if (!NEGOCIOS[_slug]) {
+      // Sin negocio (o clave inválida): mandamos al menú para elegir uno válido.
       location.replace('menu.html');
     }
   </script>
