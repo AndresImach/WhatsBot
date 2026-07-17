@@ -60,11 +60,20 @@ export async function listarMensajesDesde(convId, desdeId = 0) {
   return turso('SELECT id, rol, contenido, ts FROM "DemoMensaje" WHERE convId = ? AND id > ? ORDER BY id ASC', [convId, desdeId]);
 }
 
-// Para el backoffice.
-export async function listarConversaciones(estado) {
-  return estado
-    ? turso('SELECT convId, negocio, estado, updatedAt FROM "DemoConversacion" WHERE estado = ? ORDER BY updatedAt DESC LIMIT 200', [estado])
-    : turso('SELECT convId, negocio, estado, updatedAt FROM "DemoConversacion" ORDER BY updatedAt DESC LIMIT 200');
+// Para el backoffice. Ambos filtros son opcionales y se combinan con AND:
+//   - estado:  'humano' | 'bot' (la pestaña del backoffice).
+//   - negocio: la clave del negocio (ej: 'sunstar') para el backoffice de UN
+//              solo negocio; sin él, trae los de todos (vista "Todas").
+export async function listarConversaciones(estado, negocio) {
+  const conds = [];
+  const args = [];
+  if (estado) { conds.push("estado = ?"); args.push(estado); }
+  if (negocio) { conds.push("negocio = ?"); args.push(negocio); }
+  const where = conds.length ? " WHERE " + conds.join(" AND ") : "";
+  return turso(
+    'SELECT convId, negocio, estado, updatedAt FROM "DemoConversacion"' + where + " ORDER BY updatedAt DESC LIMIT 200",
+    args
+  );
 }
 export async function listarMensajes(convId, limite = 300) {
   return turso('SELECT rol, contenido, ts FROM "DemoMensaje" WHERE convId = ? ORDER BY id ASC LIMIT ?', [convId, limite]);

@@ -53,11 +53,21 @@ mano — el widget del demo (`index.html`) hace polling y muestra la respuesta
 como si fuera un mensaje entrante, y con "Devolver al bot" la conversación
 vuelve a quedar en piloto automático.
 
+**Un backoffice por negocio:** igual que la demo del chat, el backoffice se
+abre para UN negocio con `?n=<clave>` (la misma clave de `negocios.js` que usás
+en `/demo?n=<clave>`), y muestra SOLO las conversaciones de ese negocio. Así en
+la reunión cada cliente ve su propio backoffice, sin mezclarse con los demás.
+
+- URL por negocio: `https://tu-proyecto.vercel.app/backoffice?n=elfuego`.
+- Sin `?n=`: `https://tu-proyecto.vercel.app/backoffice` muestra un selector
+  para elegir el negocio (o "Todas las conversaciones", `?todas=1`, para verlas
+  todas juntas — útil para vos).
 - Necesita: `LOG_TURSO_DATABASE_URL` / `LOG_TURSO_AUTH_TOKEN` (correr
   `demo/schema.sql` una vez ahí) y `BACKOFFICE_PASSWORD` / `BACKOFFICE_SESSION_SECRET`.
+  La contraseña es una sola, compartida: `?n=` separa la VISTA por negocio, no
+  es un login distinto por cliente.
 - Sin esas env vars, el demo sigue funcionando exactamente igual, solo que sin
   la pausa ni el backoffice (se comporta como antes).
-- URL: `https://tu-proyecto.vercel.app/backoffice`.
 
 ---
 

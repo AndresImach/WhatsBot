@@ -5,6 +5,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backoffice — Demo</title>
+  <!-- Los negocios viven en negocios.js. El backoffice se abre para UNO con
+       ?n=<clave> (ej: /backoffice?n=sunstar) y muestra solo SUS conversaciones.
+       Sin ?n= (y sin ?todas=1) se muestra un selector de negocios. -->
+  <script src="negocios.js"></script>
+  <script>
+    // Negocio de este backoffice, tomado de la URL. Si la clave no existe en
+    // NEGOCIOS, queda como null (cae al selector). ?todas=1 fuerza la vista con
+    // TODOS los negocios juntos (la de antes de separar por negocio).
+    const _params = new URLSearchParams(location.search);
+    const _slug = _params.get('n');
+    const NEGOCIO = _slug && NEGOCIOS[_slug] ? NEGOCIOS[_slug] : null;
+    const NEGOCIO_SLUG = NEGOCIO ? _slug : null;
+    const VER_TODAS = _params.get('todas') === '1';
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif }
     html, body { height: 100% }
@@ -17,6 +31,19 @@
     #login input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #2a3942; background: #0b141a; color: #e9edef; font-size: .95rem; margin-bottom: 10px }
     #login button { width: 100%; background: #1FA855; color: #fff; border: none; padding: 10px; border-radius: 8px; cursor: pointer; font-size: .9rem; font-weight: 600 }
     #login .err { color: #f2836b; font-size: .82rem; margin-bottom: 10px; min-height: 1em }
+
+    /* ── Selector de negocio (cuando no hay ?n= en la URL) ── */
+    #chooser { display: none; min-height: 100vh; flex-direction: column; align-items: center; padding: 32px 16px }
+    #chooser h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; text-align: center }
+    #chooser p.sub { color: #8aa0ad; font-size: .9rem; margin-bottom: 28px; text-align: center }
+    #chooser .list { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 12px }
+    #chooser a.card { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; background: #1f2c34; border: 1px solid #2a3942; border-radius: 14px; padding: 14px 16px; transition: background .15s, border-color .15s }
+    #chooser a.card:hover { background: #2a3942; border-color: #1FA855 }
+    #chooser a.card.todas { border-style: dashed }
+    #chooser .av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg, #1FA855, #0e6b3a); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; flex-shrink: 0 }
+    #chooser .info { flex: 1; min-width: 0 }
+    #chooser .nm { font-weight: 600; font-size: 1rem }
+    #chooser .arrow { color: #1FA855; font-size: 1.4rem; flex-shrink: 0 }
 
     /* ── App ── */
     #app { display: none; height: 100vh }
@@ -74,9 +101,15 @@
 </head>
 
 <body>
+  <div id="chooser">
+    <h1>Backoffice</h1>
+    <p class="sub">Elegí el negocio cuyas conversaciones querés atender.</p>
+    <div class="list" id="chooserList"></div>
+  </div>
+
   <div id="login">
     <form onsubmit="return login(event)">
-      <h1>Backoffice — Demo</h1>
+      <h1 id="loginTitulo">Backoffice — Demo</h1>
       <div class="err" id="loginErr"></div>
       <input type="password" id="loginPass" placeholder="Contraseña" autofocus>
       <button type="submit">Entrar</button>
@@ -87,7 +120,7 @@
     <div class="layout" id="layout">
       <div class="sidebar">
         <header>
-          <h1>Conversaciones</h1>
+          <h1 id="appTitulo">Conversaciones</h1>
           <button class="logout" onclick="logout()">Salir</button>
         </header>
         <div class="tabs">
@@ -107,9 +140,29 @@
     let convActual = null;
     let tabActual = 'humano';
 
+    // Título según el negocio (o "Todas" / selector). NEGOCIO/NEGOCIO_SLUG/VER_TODAS
+    // se resolvieron en el <head> a partir de la URL.
+    const tituloNegocio = NEGOCIO ? NEGOCIO.nombre : (VER_TODAS ? 'Todas las conversaciones' : 'Demo');
+    document.getElementById('loginTitulo').textContent = 'Backoffice — ' + tituloNegocio;
+    document.getElementById('appTitulo').textContent = tituloNegocio;
+    document.title = 'Backoffice — ' + tituloNegocio;
+
+    // Arma el querystring de /conversaciones sumando SIEMPRE el negocio de este
+    // backoffice (si lo hay), así cada negocio ve solo lo suyo. En la vista
+    // "Todas" (VER_TODAS) no se filtra por negocio.
+    function qsConversaciones(extra) {
+      const p = new URLSearchParams();
+      if (NEGOCIO_SLUG) p.set('negocio', NEGOCIO_SLUG);
+      for (const [k, v] of Object.entries(extra || {})) if (v != null) p.set(k, v);
+      const s = p.toString();
+      return s ? ('?' + s) : '';
+    }
+
     function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     function hora(ts) { return (ts || '').slice(0, 16).replace('T', ' '); }
     function corto(id) { return (id || '').slice(0, 8); }
+    // Nombre lindo del negocio a partir de su clave (ej: 'sunstar' → 'Sunstar Cinemas · Tucumán').
+    function nombreNegocio(slug) { return (NEGOCIOS[slug] && NEGOCIOS[slug].nombre) || slug || 'demo'; }
 
     async function api(path, opts) {
       const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts && opts.headers) } });
@@ -120,14 +173,38 @@
     }
 
     function mostrarLogin() {
+      document.getElementById('chooser').style.display = 'none';
       document.getElementById('app').style.display = 'none';
       document.getElementById('login').style.display = 'flex';
     }
     function mostrarApp() {
+      document.getElementById('chooser').style.display = 'none';
       document.getElementById('login').style.display = 'none';
       document.getElementById('app').style.display = 'block';
       cargarLista();
       if (!window._poll) window._poll = setInterval(() => { cargarLista(); if (convActual) actualizarHilo(convActual, true); }, 4000);
+    }
+
+    // Selector de negocio: se muestra cuando la URL no trae ?n=<clave> válida
+    // ni ?todas=1. Cada tarjeta abre el backoffice de ese negocio; abajo, una
+    // opción para ver todas las conversaciones juntas.
+    function mostrarChooser() {
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('app').style.display = 'none';
+      const cont = document.getElementById('chooser');
+      const lista = document.getElementById('chooserList');
+      lista.innerHTML = Object.entries(NEGOCIOS).map(([slug, n]) => `
+        <a class="card" href="backoffice.html?n=${encodeURIComponent(slug)}">
+          <div class="av">${esc(n.avatar)}</div>
+          <div class="info"><div class="nm">${esc(n.nombre)}</div></div>
+          <div class="arrow">›</div>
+        </a>`).join('') + `
+        <a class="card todas" href="backoffice.html?todas=1">
+          <div class="av">📋</div>
+          <div class="info"><div class="nm">Todas las conversaciones</div></div>
+          <div class="arrow">›</div>
+        </a>`;
+      cont.style.display = 'flex';
     }
 
     async function login(ev) {
@@ -160,7 +237,7 @@
     async function cargarLista() {
       let data;
       try {
-        data = await api('/api/backoffice/conversaciones' + (tabActual ? ('?estado=' + tabActual) : ''));
+        data = await api('/api/backoffice/conversaciones' + qsConversaciones(tabActual ? { estado: tabActual } : {}));
       } catch (e) {
         document.getElementById('lista').innerHTML = '<div class="vacio">⚠️ ' + esc(e.message) + '</div>';
         return;
@@ -171,10 +248,13 @@
         lista.innerHTML = '<div class="vacio">' + (tabActual === 'humano' ? 'Ninguna conversación necesita una persona ahora mismo.' : 'Todavía no hay conversaciones.') + '</div>';
         return;
       }
+      // En el backoffice de un solo negocio, la cabecera ya dice de qué negocio
+      // es: cada fila lidera con el id de conversación. En la vista "Todas",
+      // cada fila muestra a qué negocio pertenece.
       lista.innerHTML = convs.map((c) => `
         <div class="item ${c.convId === convActual ? 'sel' : ''}" onclick="seleccionar('${c.convId}')">
           <div class="fila1">
-            <span class="nm">${esc(c.negocio) || 'demo'}</span>
+            <span class="nm">${NEGOCIO_SLUG ? ('Conversación ' + corto(c.convId)) : esc(nombreNegocio(c.negocio))}</span>
             <span class="badge ${c.estado === 'humano' ? 'humano' : 'bot'}">${c.estado === 'humano' ? '🙋 Persona' : '🤖 Bot'}</span>
           </div>
           <span class="num">${corto(c.convId)}… · ${hora(c.updatedAt)}</span>
@@ -234,7 +314,7 @@
 
       // Estado (humano/bot) mostrado en el header, tomado de /conversaciones.
       try {
-        const todas = await api('/api/backoffice/conversaciones');
+        const todas = await api('/api/backoffice/conversaciones' + qsConversaciones({}));
         const conv = (todas.conversaciones || []).find((c) => c.convId === convId);
         if (conv) {
           document.getElementById('estadoHilo').innerHTML = `<span class="badge ${conv.estado === 'humano' ? 'humano' : 'bot'}">${conv.estado === 'humano' ? '🙋 Persona' : '🤖 Bot'}</span>`;
@@ -272,8 +352,14 @@
       }
     }
 
-    // ¿Ya había una sesión activa? probamos pegándole a conversaciones.
-    api('/api/backoffice/conversaciones?estado=humano').then(mostrarApp).catch(mostrarLogin);
+    // Sin un negocio elegido (ni la vista "Todas"), mostramos el selector.
+    // Con negocio (o ?todas=1): ¿ya había sesión activa? probamos pegándole a
+    // conversaciones; si responde, entramos directo; si no, pedimos contraseña.
+    if (!NEGOCIO && !VER_TODAS) {
+      mostrarChooser();
+    } else {
+      api('/api/backoffice/conversaciones' + qsConversaciones({ estado: 'humano' })).then(mostrarApp).catch(mostrarLogin);
+    }
   </script>
 </body>
 
