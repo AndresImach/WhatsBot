@@ -17,6 +17,8 @@
 //   - "pwa"    → crear_pedido (el catálogo NO es una tool: se trae una sola vez por
 //                conversación en api/catalogo.js y se inyecta en el prompt del sistema,
 //                ver negocios.js. Evita que cada turno dispare una ronda extra sin caché.)
+//   - "solajones" → buscar_producto + ver_talles (catálogo EN VIVO por la REST API de
+//                WooCommerce, solo lectura; la compra se cierra en la web, no hay tool de pedido)
 //
 // PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
 // flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
@@ -42,6 +44,8 @@
 //     "google/gemini-2.5-flash-lite". Si usás un modelo nuevo, sumalo también a PRECIOS
 //     (más abajo) para que el costo logueado en DemoChatLog sea exacto.
 //   Para Tobías: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN (catálogo/pedidos reales)
+//   Para Sola Jones: SOLAJONES_WOO_URL, SOLAJONES_WOO_CK, SOLAJONES_WOO_CS
+//     (REST API de WooCommerce, clave de SOLO LECTURA)
 //   Para el registro de conversaciones del demo (base APARTE, no la de Tobías):
 //     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
 import { upsertConversacion, getConversacion, setEstado, agregarMensaje } from "../lib/db.js";
@@ -512,6 +516,168 @@ async function ejecutarCrearPedido(input) {
   }
 }
 
+// ─────────────────────────── Herramientas: SOLA JONES (WooCommerce) ───────────────────────────
+// Sola Jones es una tienda de ropa con e-commerce REAL en WooCommerce
+// (solajones.com). A diferencia de Tobías (catálogo en Turso), acá el catálogo
+// vive en la propia tienda y se consulta EN VIVO por la REST API v3 de
+// WooCommerce, en SOLO LECTURA. La compra se cierra en la web (checkout de
+// WooCommerce), así que el bot NO registra pedidos: busca productos, pasa
+// precios/talles/disponibilidad y deriva al link del producto para comprar.
+//
+// Config en Vercel (Environment Variables):
+//   SOLAJONES_WOO_URL  → base de la tienda, ej "https://solajones.com"
+//   SOLAJONES_WOO_CK   → Consumer key  (WooCommerce → Ajustes → Avanzado → REST API, solo lectura)
+//   SOLAJONES_WOO_CS   → Consumer secret
+// Se autentica por query-string (consumer_key/consumer_secret sobre HTTPS): es lo
+// más robusto en hostings compartidos que a veces descartan el header Authorization.
+//
+// STOCK: la tienda NO maneja inventario numérico (manage_stock=false; probado el
+// 17/07 vía la API). Solo hay estado instock/outofstock, a nivel producto y por
+// variación (talle). Por eso "disponible" es un booleano, nunca una cantidad.
+const WOO_URL = (process.env.SOLAJONES_WOO_URL || "https://solajones.com").replace(/\/$/, "");
+
+async function woo(path, params = {}) {
+  const url = new URL(WOO_URL + "/wp-json/wc/v3" + path);
+  url.searchParams.set("consumer_key", process.env.SOLAJONES_WOO_CK || "");
+  url.searchParams.set("consumer_secret", process.env.SOLAJONES_WOO_CS || "");
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined) url.searchParams.set(k, String(v));
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Woo " + r.status + " " + path);
+  return r.json();
+}
+
+// Las categorías (rubros) casi no cambian y el filtro de la REST API pide el ID
+// numérico (no el nombre). Las cacheamos a nivel módulo (persiste entre
+// invocaciones "calientes" de la función serverless) con un TTL corto, para
+// resolver nombre→id sin una llamada extra en cada búsqueda.
+let _catCache = { at: 0, list: [] };
+async function getCategoriasWoo() {
+  if (_catCache.list.length && Date.now() - _catCache.at < 10 * 60 * 1000) return _catCache.list;
+  const cats = await woo("/products/categories", { per_page: 100, _fields: "id,name,slug" });
+  _catCache = { at: Date.now(), list: (cats || []).map((c) => ({ id: c.id, name: c.name, slug: c.slug })) };
+  return _catCache.list;
+}
+async function categoriaIdWoo(nombre) {
+  if (!nombre) return null;
+  const norm = normalizarTexto(nombre);
+  const cats = await getCategoriasWoo();
+  // Primero match exacto por nombre o slug; si no, parcial en cualquier dirección
+  // (ej: "campera" ↔ "Camperas").
+  let hit = cats.find((c) => normalizarTexto(c.name) === norm || c.slug === norm);
+  if (!hit) hit = cats.find((c) => normalizarTexto(c.name).includes(norm) || norm.includes(normalizarTexto(c.name)));
+  return hit ? hit.id : null;
+}
+
+// Talles: en variables, el talle es un atributo (ej "Talle": ["S","M","L"]). Lo
+// ubicamos por nombre para poder listar los talles que maneja una prenda.
+function tallesDeAttributes(attrs) {
+  if (!Array.isArray(attrs)) return [];
+  const a = attrs.find((x) => /talle|talla|size/i.test(x?.name || ""));
+  return a && Array.isArray(a.options) ? a.options : [];
+}
+function formatearProductoWoo(p) {
+  const precio = Number(p.price);
+  const precioReg = Number(p.regular_price);
+  return {
+    id: p.id,
+    nombre: p.name,
+    precio: Number.isFinite(precio) ? precio : p.price,
+    ...(p.on_sale && p.regular_price ? { en_oferta: true, precio_regular: Number.isFinite(precioReg) ? precioReg : p.regular_price } : {}),
+    categorias: (p.categories || []).map((c) => c.name),
+    talles: tallesDeAttributes(p.attributes),
+    disponible: p.stock_status === "instock",
+    url: p.permalink,
+  };
+}
+
+const TOOL_SJ_BUSCAR_PRODUCTO = {
+  name: "buscar_producto",
+  description:
+    "Busca en el catálogo REAL y EN VIVO de Sola Jones (tienda de ropa) por nombre de prenda y/o categoría (rubro). " +
+    "Usala para: ver si tienen una prenda, dar su precio, o encontrar alternativas de un rubro (ej: 'camperas', 'babuchas', 'camisas'). " +
+    "Devuelve id, nombre, precio (y precio_regular si está en oferta), categorías, los talles que maneja la prenda, si está disponible, y la 'url' para comprarla en la web. " +
+    "NUNCA inventes prendas, precios ni talles: siempre salen de acá.",
+  input_schema: {
+    type: "object",
+    properties: {
+      texto: { type: "string", description: "Palabras clave de la prenda, ej: 'campera térmica' o 'pantalón lounge'." },
+      categoria: { type: "string", description: "Nombre (o parte) de un rubro/categoría para filtrar o buscar alternativas, ej: 'Camperas', 'Babuchas', 'Camisas'." },
+      limite: { type: "integer", description: "Máximo de resultados (por defecto 5, máximo 8). Pedí pocos: se reenvían en cada ronda siguiente de la conversación." },
+    },
+  },
+};
+
+async function ejecutarBuscarProductoSJ(input) {
+  const texto = String(input?.texto || "").trim();
+  const categoria = String(input?.categoria || "").trim();
+  const limite = Math.min(Math.max(Number(input?.limite) || 5, 1), 8);
+  if (!texto && !categoria) return JSON.stringify({ error: "Indicá 'texto' o 'categoria' para buscar." });
+  try {
+    const params = {
+      per_page: limite,
+      status: "publish",
+      _fields: "id,name,price,regular_price,on_sale,permalink,stock_status,type,categories,attributes",
+    };
+    if (texto) params.search = texto;
+    if (categoria) {
+      const catId = await categoriaIdWoo(categoria);
+      if (catId) params.category = catId;
+      else if (!texto) params.search = categoria; // rubro no reconocido y sin texto: úsalo como búsqueda libre
+    }
+    const prods = await woo("/products", params);
+    const resultados = (prods || []).map(formatearProductoWoo);
+    return JSON.stringify({ resultados, cantidad: resultados.length });
+  } catch (e) {
+    return JSON.stringify({ error: "No se pudo consultar el catálogo en este momento." });
+  }
+}
+
+// ver_talles: dado un producto (id de buscar_producto), devuelve el detalle de
+// talles con su disponibilidad y precio. Es lo que permite responder "¿tenés el
+// pantalón en talle M?". Para prendas de talle único, devuelve el estado general.
+const TOOL_SJ_VER_TALLES = {
+  name: "ver_talles",
+  description:
+    "Devuelve, por el 'id' de una prenda (de buscar_producto), el detalle de TALLES con su disponibilidad y precio en tiempo real. " +
+    "Usala cuando el cliente pregunta por un talle puntual o quiere saber qué talles quedan de una prenda concreta. " +
+    "OJO: la tienda no lleva stock numérico, así que 'disponible' es sí/no, no una cantidad.",
+  input_schema: {
+    type: "object",
+    properties: {
+      producto_id: { type: "integer", description: "id de la prenda (de buscar_producto)." },
+    },
+    required: ["producto_id"],
+  },
+};
+
+async function ejecutarVerTallesSJ(input) {
+  const id = Number(input?.producto_id);
+  if (!id) return JSON.stringify({ error: "Falta un 'producto_id' válido." });
+  try {
+    const prod = await woo(`/products/${id}`, { _fields: "id,name,type,price,stock_status,permalink" });
+    if (!prod || !prod.id) return JSON.stringify({ error: "No existe ese producto_id.", producto_id: id });
+    if (prod.type !== "variable") {
+      return JSON.stringify({
+        id: prod.id,
+        nombre: prod.name,
+        talle_unico: true,
+        precio: Number(prod.price) || prod.price,
+        disponible: prod.stock_status === "instock",
+        url: prod.permalink,
+      });
+    }
+    const vars = await woo(`/products/${id}/variations`, { per_page: 100, _fields: "id,attributes,price,stock_status" });
+    const talles = (vars || []).map((v) => ({
+      talle: (v.attributes || []).map((a) => a.option).filter(Boolean).join(" / ") || "—",
+      precio: Number(v.price) || v.price,
+      disponible: v.stock_status === "instock",
+    }));
+    return JSON.stringify({ id: prod.id, nombre: prod.name, talles, url: prod.permalink });
+  } catch (e) {
+    return JSON.stringify({ error: "No se pudo consultar los talles en este momento." });
+  }
+}
+
 // ─────────────────────────── Selección y dispatch ───────────────────────────
 // El orden de las tools es FIJO: forma parte del prefijo cacheado (tools → system).
 // Reordenarlas invalidaría el caché, así que se mantienen como literal estable.
@@ -519,9 +685,17 @@ function toolsPara(agente, cineId) {
   if (agente === "cine" && cineId) return [TOOL_CONSULTAR_FUNCION];
   if (agente === "tobias") return [TOOL_BUSCAR_PRODUCTO, TOOL_VERIFICAR_DISPONIBILIDAD, TOOL_REGISTRAR_PEDIDO];
   if (agente === "pwa") return [TOOL_CREAR_PEDIDO];
+  if (agente === "solajones") return [TOOL_SJ_BUSCAR_PRODUCTO, TOOL_SJ_VER_TALLES];
   return undefined;
 }
 async function ejecutarTool(name, input, ctx) {
+  // Sola Jones tiene su propia "buscar_producto" (WooCommerce), distinta de la de
+  // Tobías (Turso). Dispatch por agente para que un mismo nombre no cruce fuentes.
+  if (ctx.agente === "solajones") {
+    if (name === "buscar_producto") return ejecutarBuscarProductoSJ(input);
+    if (name === "ver_talles") return ejecutarVerTallesSJ(input);
+    return JSON.stringify({ error: "Herramienta desconocida." });
+  }
   if (name === "consultar_funcion") return ejecutarConsultarFuncion(ctx.cineId, input);
   if (name === "buscar_producto") return ejecutarBuscarProducto(input);
   if (name === "verificar_disponibilidad") return ejecutarVerificarDisponibilidad(input);
@@ -811,7 +985,7 @@ export default async function handler(req, res) {
     }
 
     const tools = toolsPara(agente, cineId);
-    const ctx = { cineId };
+    const ctx = { cineId, agente };
     const convo = podarHistorial(messages);
 
     // Router: elegimos la categoría del último mensaje (y con ella, el modelo).
