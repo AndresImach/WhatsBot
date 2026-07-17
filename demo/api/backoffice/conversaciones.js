@@ -7,7 +7,8 @@ export default async function handler(req, res) {
 
   try {
     const estado = req.query?.estado || null;
-    const conversaciones = await listarConversaciones(estado);
+    const negocio = req.query?.negocio || null;
+    const conversaciones = await listarConversaciones(estado, negocio);
     return res.status(200).json({ conversaciones });
   } catch (e) {
     console.error(e);
