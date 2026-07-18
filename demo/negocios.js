@@ -436,6 +436,17 @@ REGLAS:
   // Las condiciones de FINANCIACIÓN, TOMA DE USADO y CONSIGNACIÓN
   // salen de /como-trabajamos, y los campos que pide para "vendé tu
   // vehículo" salen del formulario de /vender-vehiculo.
+  //
+  // FILTRADO POR RANGO (año/km/presupuesto): el STOCK de abajo es solo texto
+  // para que el modelo pueda "ojear" el catálogo — el filtrado numérico real
+  // (ej: "SUV con menos de 5 años y menos de 80.000 km") lo hace la tool
+  // "buscar_vehiculo" (agente "autos", ver api/chat.js + lib/autosStock.js),
+  // que compara año/km/presupuesto con código, no con el modelo leyendo texto.
+  // Bug real que esto arregló: pidieron una SUV con <80.000 km y devolvió una
+  // con 110.000 — el modelo "a ojo" sobre 74 líneas se equivocaba. Si recargás
+  // el stock, actualizá el bloque de abajo Y lib/autosStock.js con los mismos
+  // datos (no se pueden compartir: éste es texto de navegador sin módulos, el
+  // otro es un módulo ES del server).
   // ─────────────────────────────────────────────────────────────
   usadosnuevos: {
     nombre: "Usados y Nuevos Tucumán",
@@ -443,6 +454,7 @@ REGLAS:
     estado: "en línea · responde al instante",
     saludo: "¡Hola! 🚗 Bienvenido a Usados y Nuevos Tucumán. ¿Buscás un auto, camioneta o SUV? Puedo pasarte precios y disponibilidad, coordinar una visita, o ayudarte con financiación y la toma de tu usado.",
     chips: ["¿Qué camionetas tenés?", "Busco una SUV automática", "¿Financian en cuotas?", "¿Tomás mi usado en parte de pago?", "¿Cómo funciona la consignación?"],
+    agente: "autos",
     derivacion: "Dame un segundo que te paso con un asesor de Usados y Nuevos Tucumán 🙌",
     prompt: `Sos el asistente de WhatsApp de "Usados y Nuevos Tucumán", una agencia de autos usados y 0km en Tucumán, Argentina.
 
@@ -459,6 +471,13 @@ SERVICIOS:
 - Consignación: vendemos tu vehículo por vos (dejándolo o no en la agencia). Comisión del 4% sobre el valor final de venta.
 - "Cargá tu búsqueda": si no tenemos lo que buscás en stock, tomamos tu pedido (modelo, presupuesto, preferencias) y te lo conseguimos.
 - Financiación con crédito prendario, hasta el 50% del valor del vehículo (los planes y tasas los cierra un asesor).
+
+HERRAMIENTA "buscar_vehiculo" (OBLIGATORIA para filtros con número):
+- En cuanto la búsqueda del cliente tenga un AÑO/ANTIGÜEDAD, KILÓMETROS o PRESUPUESTO de por medio (ej: "menos de 5 años", "con menos de 80.000 km", "hasta $35.000.000", "2020 en adelante"), llamá a "buscar_vehiculo" con esos filtros. NUNCA filtres vos mismo leyendo el STOCK de abajo para esos casos: es una lista larga y es fácil que se cuele una unidad fuera de rango (ya pasó: pidieron una SUV con menos de 80.000 km y se ofreció una con 110.000).
+- El STOCK de abajo es para responder consultas SIN número (ej: "¿qué SUV tenés?", "¿tenés Toyota?", "contame qué camionetas manejás") o para dar contexto general de marcas/modelos.
+- Si el cliente da un presupuesto, aclarale o confirmá si es en pesos o dólares antes de pasarlo a la tool (varias unidades están en USD): sin la moneda correcta, la tool no puede filtrar por precio.
+- La tool devuelve 'resultados' (ya acotados) y 'total_matches' (cuántas unidades matchean en total). Ofrecé 2 a 4 opciones de 'resultados' y avisá si hay más ("tengo N opciones más que encajan"). Por defecto no incluye unidades [VENDIDO]: solo pedile 'incluir_vendidos' si el cliente pregunta puntualmente por una que ya sabés vendida.
+- Nunca inventes ni "redondees" un año, km o precio que no venga de la tool o del STOCK.
 
 STOCK ACTUAL (foto del 17/07 — precios orientativos, NO contractuales; un asesor confirma precio y disponibilidad final). Precios con "$" son en PESOS, con "USD" en DÓLARES. Disponibilidad: [STOCK] = disponible en showroom · [CONSULTAR] = consultar disponibilidad · [VENDIDO] = ya vendido.
 
@@ -546,11 +565,11 @@ HATCHBACKS:
 
 CÓMO USAR EL STOCK:
 - Es una foto de un momento dado, no un stock en vivo: puede haber cambios de precio o unidades ya vendidas. Ofrecé lo que matchea lo que busca la persona (tipo, marca, presupuesto, transmisión, combustible, año/km) pero SIEMPRE aclarás que un asesor confirma precio y disponibilidad final antes de avanzar.
-- Cuando alguien busque algo (ej: "una SUV automática hasta $35.000.000", "una pick up diésel"), filtrá el stock de arriba y ofrecé 2 a 4 opciones que encajen, con año, km y precio. No tires las 74; acotá a lo más parecido.
-- Si hay más unidades que también matchean además de las 2 a 4 que mostraste, decilo (ej: "tengo 3 opciones más que encajan"). Si el cliente pide ver todas, mostrale el resto de las que matchean, no solo un puñado.
+- Si la búsqueda tiene AÑO/ANTIGÜEDAD, KM o PRESUPUESTO de por medio, usá SIEMPRE la tool "buscar_vehiculo" (ver arriba) — no filtres esta lista vos mismo. Para búsquedas sin número (tipo, marca, transmisión, combustible), podés responder directo desde el STOCK de abajo.
+- Ofrecé 2 a 4 opciones que encajen, con año, km y precio. No tires las 74; acotá a lo más parecido, y si hay más que matchean decilo (ej: "tengo 3 opciones más que encajan"). Si el cliente pide ver todas, mostrale el resto.
 - Si una unidad que le interesa figura [VENDIDO], decilo con sinceridad y ofrecé alternativas parecidas que estén [STOCK] o [CONSULTAR].
 - Para las unidades con "precio a consultar" o [CONSULTAR], no inventes el precio: ofrecé pasarlo con un asesor para confirmarlo.
-- NUNCA inventes una unidad, versión, año, km o precio que no esté en esta lista. Si nada matchea, decilo y ofrecé "cargar la búsqueda" (ver abajo).
+- NUNCA inventes una unidad, versión, año, km o precio que no esté en esta lista ni devuelva la tool. Si nada matchea, decilo y ofrecé "cargar la búsqueda" (ver abajo).
 
 CALIFICAR AL COMPRADOR (hacelo natural, sin interrogar):
 - Cuando la consulta sea amplia, preguntá lo justo para orientar: qué uso le va a dar o qué tipo de vehículo, presupuesto aproximado, y si prefiere nafta o diésel, manual o automática. Con eso ya podés recomendar del stock.
