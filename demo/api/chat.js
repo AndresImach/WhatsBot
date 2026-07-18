@@ -17,6 +17,13 @@
 //   - "pwa"    → crear_pedido (el catálogo NO es una tool: se trae una sola vez por
 //                conversación en api/catalogo.js y se inyecta en el prompt del sistema,
 //                ver negocios.js. Evita que cada turno dispare una ronda extra sin caché.)
+//   - "autos"  → buscar_vehiculo (filtra el stock de Usados y Nuevos Tucumán por año/km/
+//                presupuesto con comparaciones numéricas EXACTAS — ver lib/autosStock.js.
+//                El STOCK también está pegado como texto en el prompt para que el modelo
+//                pueda "ojear" el catálogo, pero cualquier filtro con número de por medio
+//                (años, km, presupuesto) tiene que pasar por esta tool: dejarlo en manos
+//                del modelo leyendo 74 líneas de texto es justamente el bug que esto
+//                arregla — "SUV con menos de 80.000 km" devolviendo una con 110.000.)
 //
 // PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
 // flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
@@ -45,6 +52,7 @@
 //   Para el registro de conversaciones del demo (base APARTE, no la de Tobías):
 //     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
 import { upsertConversacion, getConversacion, setEstado, agregarMensaje } from "../lib/db.js";
+import { buscarVehiculos } from "../lib/autosStock.js";
 
 const CINE_API = "https://apiv2.gaf.adro.studio";
 // Mensaje por defecto cuando se deriva a una persona y el negocio (negocios.js)
@@ -512,6 +520,40 @@ async function ejecutarCrearPedido(input) {
   }
 }
 
+// ─────────────────────────── Herramientas: USADOS Y NUEVOS (autos) ───────────────────────────
+const TOOL_BUSCAR_VEHICULO = {
+  name: "buscar_vehiculo",
+  description:
+    "Filtra el stock REAL de vehículos por año/antigüedad, kilómetros, presupuesto, tipo, marca, transmisión y/o combustible, con comparaciones numéricas EXACTAS. " +
+    "OBLIGATORIA para cualquier búsqueda que tenga un número de por medio (ej: 'menos de 5 años', 'menos de 80.000 km', 'hasta $35.000.000'): NUNCA filtres vos mismo leyendo el STOCK del prompt para esos casos, porque leyendo una lista larga es fácil que se cuele una unidad fuera de rango. " +
+    "El STOCK del prompt sirve para responder consultas SIN número (ej: '¿qué SUV tenés?', '¿tenés Toyota?') o para dar contexto general, pero en cuanto aparece un año/antigüedad, km o presupuesto, usá esta tool.",
+  input_schema: {
+    type: "object",
+    properties: {
+      tipo: { type: "string", description: "Tipo de vehículo: 'pickup', 'suv', 'sedan' o 'hatchback'. Omitilo para buscar en todos." },
+      marca: { type: "string", description: "Marca a filtrar, ej: 'Toyota', 'Ford'." },
+      antiguedad_max_anios: { type: "integer", description: "Antigüedad máxima en años (ej: 5 para 'menos de 5 años'). Se calcula contra el año actual real, no el que vos creas que es." },
+      anio_min: { type: "integer", description: "Año mínimo exacto del modelo, si el cliente dio un año puntual en vez de una antigüedad (ej: '2020 en adelante')." },
+      km_max: { type: "integer", description: "Kilometraje máximo (ej: 80000 para 'menos de 80.000 km')." },
+      presupuesto_max: { type: "number", description: "Presupuesto máximo. SIEMPRE mandá también 'moneda' junto con esto, o no se puede filtrar por precio." },
+      moneda: { type: "string", description: "'$' (pesos) o 'USD' (dólares) — la moneda del presupuesto_max. Fijate en qué moneda está el vehículo que le interesa antes de asumir una." },
+      transmision: { type: "string", description: "'manual' o 'automatica'." },
+      combustible: { type: "string", description: "'nafta', 'diesel', 'hibrido' o 'electrico'." },
+      incluir_vendidos: { type: "boolean", description: "Por defecto NO se incluyen las unidades [VENDIDO]. Poné true solo si el cliente pregunta explícitamente por algo que ya sabés que está vendido." },
+      limite: { type: "integer", description: "Máximo de resultados a devolver (por defecto 6, máximo 10). Mostrale al cliente 2 a 4 y avisale si hay más (usá 'total_matches')." },
+    },
+  },
+};
+
+async function ejecutarBuscarVehiculo(input) {
+  try {
+    const r = buscarVehiculos(input || {});
+    return JSON.stringify(r);
+  } catch (e) {
+    return JSON.stringify({ error: "No se pudo filtrar el stock en este momento." });
+  }
+}
+
 // ─────────────────────────── Selección y dispatch ───────────────────────────
 // El orden de las tools es FIJO: forma parte del prefijo cacheado (tools → system).
 // Reordenarlas invalidaría el caché, así que se mantienen como literal estable.
@@ -519,6 +561,7 @@ function toolsPara(agente, cineId) {
   if (agente === "cine" && cineId) return [TOOL_CONSULTAR_FUNCION];
   if (agente === "tobias") return [TOOL_BUSCAR_PRODUCTO, TOOL_VERIFICAR_DISPONIBILIDAD, TOOL_REGISTRAR_PEDIDO];
   if (agente === "pwa") return [TOOL_CREAR_PEDIDO];
+  if (agente === "autos") return [TOOL_BUSCAR_VEHICULO];
   return undefined;
 }
 async function ejecutarTool(name, input, ctx) {
@@ -527,6 +570,7 @@ async function ejecutarTool(name, input, ctx) {
   if (name === "verificar_disponibilidad") return ejecutarVerificarDisponibilidad(input);
   if (name === "registrar_pedido") return ejecutarRegistrarPedido(input);
   if (name === "crear_pedido") return ejecutarCrearPedido(input);
+  if (name === "buscar_vehiculo") return ejecutarBuscarVehiculo(input);
   return JSON.stringify({ error: "Herramienta desconocida." });
 }
 
