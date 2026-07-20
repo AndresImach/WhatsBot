@@ -61,13 +61,30 @@ la reunión cada cliente ve su propio backoffice, sin mezclarse con los demás.
 - URL por negocio: `https://tu-proyecto.vercel.app/backoffice?n=elfuego`.
 - Sin `?n=`: `https://tu-proyecto.vercel.app/backoffice` muestra un selector
   para elegir el negocio (o "Todas las conversaciones", `?todas=1`, para verlas
-  todas juntas — útil para vos).
+  todas juntas).
 - Necesita: `LOG_TURSO_DATABASE_URL` / `LOG_TURSO_AUTH_TOKEN` (correr
-  `demo/schema.sql` una vez ahí) y `BACKOFFICE_PASSWORD` / `BACKOFFICE_SESSION_SECRET`.
-  La contraseña es una sola, compartida: `?n=` separa la VISTA por negocio, no
-  es un login distinto por cliente.
+  `demo/schema.sql` una vez ahí) y `BACKOFFICE_SESSION_SECRET`.
 - Sin esas env vars, el demo sigue funcionando exactamente igual, solo que sin
   la pausa ni el backoffice (se comporta como antes).
+
+**Login por agente (no hay contraseña única compartida).** Cada persona que
+atiende conversaciones tiene su propio usuario:
+
+```bash
+cd demo
+node scripts/crear-agente.mjs valentina "unaClaveSegura" "Valentina"
+```
+
+El mismo comando sirve para resetear la contraseña de un agente que ya existe.
+Necesita `LOG_TURSO_DATABASE_URL` / `LOG_TURSO_AUTH_TOKEN` en el entorno (o un
+`.env` en `demo/`) — ojo, es la base de LOGS, no la de Tobías.
+
+**Asignación, etiquetas, notas y respuestas rápidas** funcionan igual que en
+`bot/` (ver más abajo), con un matiz: acá el "canal" ya lo da el `negocio`
+(`sunstar`, `elfuego`, `tobias`, etc.), así que en la vista "Todas las
+conversaciones" hay un filtro por negocio en vez de por canal. Las respuestas
+rápidas también se pueden scopear por negocio (una clave `horario` puede tener
+un texto distinto para el cine que para la rotisería) o dejarse globales.
 
 ---
 
