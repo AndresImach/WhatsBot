@@ -5,10 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backoffice — Demo</title>
+  <link rel="stylesheet" href="/formato-whatsapp.css">
   <!-- Los negocios viven en negocios.js. El backoffice se abre para UNO con
        ?n=<clave> (ej: /backoffice?n=sunstar) y muestra solo SUS conversaciones.
        Sin ?n= (y sin ?todas=1) se muestra un selector de negocios. -->
   <script src="negocios.js"></script>
+  <script src="/formato-whatsapp.js"></script>
   <script>
     // Negocio de este backoffice, tomado de la URL. Si la clave no existe en
     // NEGOCIOS, queda como null (cae al selector). ?todas=1 fuerza la vista con
@@ -309,7 +311,7 @@
 
       const yaAbajo = hilo.scrollHeight - hilo.scrollTop - hilo.clientHeight < 60;
       hilo.innerHTML = mensajes.map((m) => `
-          <div class="burbuja ${m.rol}">${esc(m.contenido)}<span class="hora">${hora(m.ts)}</span></div>`).join('');
+          <div class="burbuja wa-text ${m.rol}">${formatearWhatsApp(m.contenido)}<span class="hora">${hora(m.ts)}</span></div>`).join('');
       if (!silencioso || yaAbajo) hilo.scrollTop = hilo.scrollHeight;
 
       // Estado (humano/bot) mostrado en el header, tomado de /conversaciones.

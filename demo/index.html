@@ -6,11 +6,13 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Demo — Chatbot de WhatsApp</title>
+  <link rel="stylesheet" href="/formato-whatsapp.css">
 
   <!-- Los negocios viven en negocios.js. Se elige cuál mostrar con ?n=<clave> en la URL. -->
   <script src="negocios.js"></script>
   <!-- cartelera.js trae la cartelera en vivo para los negocios con cineId (ej: Cine Atlas). -->
   <script src="cartelera.js"></script>
+  <script src="/formato-whatsapp.js"></script>
   <script>
     // Elegí el negocio según la URL: /demo?n=sunstar  → NEGOCIOS.sunstar
     const _slug = new URLSearchParams(location.search).get('n');
@@ -139,8 +141,45 @@
       font-size: .92rem;
       line-height: 1.4;
       color: #e9edef;
+      position: relative;
       word-wrap: break-word;
       white-space: pre-wrap
+    }
+
+    .bub-copy {
+      position: absolute;
+      top: 2px;
+      right: -31px;
+      width: 25px;
+      height: 25px;
+      padding: 0;
+      border: 1px solid #2a3942;
+      border-radius: 50%;
+      background: #1f2c34;
+      color: #aebac1;
+      font: inherit;
+      font-size: .8rem;
+      line-height: 23px;
+      text-align: center;
+      cursor: pointer;
+      opacity: .58;
+      transition: opacity .15s, color .15s, border-color .15s
+    }
+
+    .out .bub-copy {
+      right: auto;
+      left: -31px
+    }
+
+    .bub:hover .bub-copy,
+    .bub-copy:focus-visible {
+      opacity: 1
+    }
+
+    .bub-copy.copied {
+      color: #25d366;
+      border-color: #25d366;
+      opacity: 1
     }
 
     .in {
@@ -295,9 +334,57 @@
 
     let history = []; // {role, content}
     function hora() { const d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0') }
+    async function copiarRaw(texto) {
+      const raw = String(texto ?? '');
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard API no disponible');
+        await navigator.clipboard.writeText(raw);
+        return;
+      } catch (_) {
+        const area = document.createElement('textarea');
+        area.value = raw;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+        document.body.appendChild(area);
+        area.select();
+        const copiado = document.execCommand('copy');
+        area.remove();
+        if (!copiado) throw new Error('No se pudo copiar el mensaje');
+      }
+    }
     function burbuja(txt, tipo) {
-      const b = document.createElement('div'); b.className = 'bub ' + tipo;
-      b.innerHTML = txt.replace(/</g, '&lt;') + '<span class="tm">' + hora() + (tipo === 'out' ? '' : ' ✓✓') + '</span>';
+      const raw = String(txt ?? '');
+      const b = document.createElement('div'); b.className = 'bub wa-text ' + tipo;
+      b.innerHTML = formatearWhatsApp(raw) + '<span class="tm">' + hora() + (tipo === 'out' ? '' : ' ✓✓') + '</span>';
+      const copiar = document.createElement('button');
+      copiar.type = 'button';
+      copiar.className = 'bub-copy';
+      copiar.textContent = '⧉';
+      copiar.title = 'Copiar texto original';
+      copiar.setAttribute('aria-label', 'Copiar texto original');
+      copiar.addEventListener('click', async () => {
+        try {
+          await copiarRaw(raw);
+          copiar.textContent = '✓';
+          copiar.title = 'Copiado';
+          copiar.setAttribute('aria-label', 'Texto copiado');
+          copiar.classList.add('copied');
+          setTimeout(() => {
+            copiar.textContent = '⧉';
+            copiar.title = 'Copiar texto original';
+            copiar.setAttribute('aria-label', 'Copiar texto original');
+            copiar.classList.remove('copied');
+          }, 1200);
+        } catch (_) {
+          copiar.textContent = '!';
+          copiar.title = 'No se pudo copiar';
+          setTimeout(() => {
+            copiar.textContent = '⧉';
+            copiar.title = 'Copiar texto original';
+          }, 1200);
+        }
+      });
+      b.appendChild(copiar);
       body.appendChild(b); body.scrollTop = body.scrollHeight; return b;
     }
     function typing(on) {
