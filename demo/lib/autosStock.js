@@ -63,14 +63,18 @@ function slugUrl(s) {
     .replace(/^-+|-+$/g, "");
 }
 
-function prepararItemParaPrompt(raw) {
-  const { imagen_url, galeria, descripcion, fecha_creacion, ...item } = raw;
+function construirLinkUrl(raw) {
   const segmentos = [raw.marca, raw.modelo];
   if (String(raw.version || "").trim()) segmentos.push(raw.version);
   segmentos.push(raw.id);
+  return `${USADOS_BASE_URL}/vehiculo/${segmentos.map(slugUrl).join("/")}/`;
+}
+
+function prepararItemParaPrompt(raw) {
+  const { imagen_url, galeria, descripcion, fecha_creacion, ...item } = raw;
   return {
     ...item,
-    link_url: `${USADOS_BASE_URL}/vehiculo/${segmentos.map(slugUrl).join("/")}/`,
+    link_url: construirLinkUrl(raw),
   };
 }
 
@@ -99,6 +103,7 @@ function mapearItem(raw) {
     moneda,
     precio,
     disponibilidad: DISPONIBILIDAD_API_A_INTERNO[raw.disponibilidad] || normalizar(raw.disponibilidad),
+    link_url: construirLinkUrl(raw),
   };
 }
 

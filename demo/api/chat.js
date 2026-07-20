@@ -55,6 +55,7 @@
 //     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
 import { upsertConversacion, getConversacion, setEstado, agregarMensaje } from "../lib/db.js";
 import { buscarVehiculos } from "../lib/autosStock.js";
+import { normalizarContenidoWhatsApp } from "../lib/whatsappSalida.js";
 
 const CINE_API = "https://apiv2.gaf.adro.studio";
 // Mensaje por defecto cuando se deriva a una persona y el negocio (negocios.js)
@@ -927,6 +928,12 @@ export default async function handler(req, res) {
       sumarUsage(handlerUsage, data.usage);
       finalData = data;
       finalStatus = status;
+    }
+
+    // Segunda barrera para el agente de autos: aunque el modelo ignore alguna
+    // instrucción, la respuesta que recibe WhatsApp nunca sale con Markdown.
+    if (agente === "autos") {
+      finalData = { ...finalData, content: normalizarContenidoWhatsApp(finalData.content) };
     }
 
     if (convId && persistenciaActiva()) {
