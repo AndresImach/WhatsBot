@@ -1,16 +1,11 @@
 // Stock EN VIVO de "Usados y Nuevos Tucumán" — se trae desde la API real del
 // negocio (WordPress, action=usados_filter_vehicles) en vez de una foto de
-// texto pegada a mano. Se cachea en memoria (CACHE_TTL_MS) porque esta función
-// la llaman tanto la tool "buscar_vehiculo" (api/chat.js, dentro del loop de
-// tools de una conversación) como api/autos.js (arma el bloque STOCK del
-// prompt) — así no se golpea la API externa en cada mensaje.
+// texto pegada a mano. Se cachea en memoria (CACHE_TTL_MS) para que la tool
+// "buscar_vehiculo" no golpee la API externa más de una vez por ventana.
 //
-// Por qué el filtrado numérico (año/km/presupuesto) es una tool y no algo que
-// lee el modelo: con el STOCK como texto en el prompt y un modelo barato, el
-// modelo "filtraba a ojo" leyendo la lista y se colaban unidades fuera de
-// rango (bug real: pidieron una SUV con menos de 80.000 km y devolvió una con
-// 110.000). La única forma de garantizar que un rango se respete siempre es
-// que la comparación numérica la haga código (acá abajo), no el modelo.
+// El stock no se inyecta en el prompt: esta herramienta es la fuente única. Así
+// las búsquedas generales consultan datos vigentes y los rangos numéricos se
+// comparan en código, sin depender de que el modelo filtre una lista a ojo.
 
 const USADOS_API_URL = "https://usadosynuevostucuman.com/wp-admin/admin-ajax.php?action=usados_filter_vehicles";
 const USADOS_BASE_URL = "https://usadosynuevostucuman.com";
@@ -23,7 +18,7 @@ const DISPONIBILIDAD_API_A_INTERNO = {
   Vendido: "vendido",
 };
 
-let _cache = null; // { raw, items, ts }
+let _cache = null; // { items, ts }
 
 function normalizar(s) {
   return String(s || "")
@@ -70,7 +65,7 @@ function construirLinkUrl(raw) {
   return `${USADOS_BASE_URL}/vehiculo/${segmentos.map(slugUrl).join("/")}/`;
 }
 
-function prepararItemParaPrompt(raw) {
+function prepararItemParaModelo(raw) {
   const { imagen_url, galeria, descripcion, fecha_creacion, ...item } = raw;
   return {
     ...item,
@@ -92,18 +87,23 @@ function mapearItem(raw) {
   const { moneda, precio } = parsearPrecio(raw);
   const nombre = [raw.marca, raw.modelo, raw.version].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return {
-    id: raw.id,
-    tipo: TIPO_API_A_INTERNO[String(raw.tipo || "").toUpperCase()] || normalizarTipo(raw.tipo),
-    marca: raw.marca || "",
-    nombre,
-    anio: Number(raw.ano) || null,
-    km: raw.kilometros !== "" && raw.kilometros != null ? Number(raw.kilometros) : null,
-    transmision: normalizar(raw.transmision) === "manual" ? "manual" : "automatica",
-    combustible: raw.combustible ? normalizar(raw.combustible) : null,
-    moneda,
-    precio,
-    disponibilidad: DISPONIBILIDAD_API_A_INTERNO[raw.disponibilidad] || normalizar(raw.disponibilidad),
-    link_url: construirLinkUrl(raw),
+    // La herramienta devuelve un registro completo pero liviano. Los valores
+    // normalizados viven aparte y nunca se muestran al modelo: se usan sólo
+    // para aplicar filtros numéricos exactos.
+    datos: prepararItemParaModelo(raw),
+    filtro: {
+      id: raw.id,
+      tipo: TIPO_API_A_INTERNO[String(raw.tipo || "").toUpperCase()] || normalizarTipo(raw.tipo),
+      marca: raw.marca || "",
+      nombre,
+      anio: Number(raw.ano) || null,
+      km: raw.kilometros !== "" && raw.kilometros != null ? Number(raw.kilometros) : null,
+      transmision: normalizar(raw.transmision) === "manual" ? "manual" : "automatica",
+      combustible: raw.combustible ? normalizar(raw.combustible) : null,
+      moneda,
+      precio,
+      disponibilidad: DISPONIBILIDAD_API_A_INTERNO[raw.disponibilidad] || normalizar(raw.disponibilidad),
+    },
   };
 }
 
@@ -116,8 +116,8 @@ async function obtenerStock() {
   try {
     const r = await fetch(USADOS_API_URL);
     const raw = await r.json();
-    const items = (raw.data || []).map(mapearItem).filter((v) => v.tipo && v.anio);
-    _cache = { raw, items, ts: ahora };
+    const items = (raw.data || []).map(mapearItem).filter((v) => v.filtro.tipo && v.filtro.anio);
+    _cache = { items, ts: ahora };
     return items;
   } catch (e) {
     if (_cache) return _cache.items;
@@ -130,6 +130,7 @@ async function obtenerStock() {
 // tiene que pasar por acá.
 async function buscarVehiculos(filtro = {}) {
   const {
+    busqueda,
     tipo,
     marca,
     anio_min,
@@ -156,12 +157,15 @@ async function buscarVehiculos(filtro = {}) {
   }
 
   const tipoNorm = tipo ? normalizarTipo(tipo) : null;
+  const palabrasBusqueda = normalizar(busqueda).split(/\s+/).filter(Boolean);
   const marcaNorm = marca ? normalizar(marca) : null;
   const transmisionNorm = transmision ? normalizar(transmision) : null;
   const combustibleNorm = combustible ? normalizar(combustible) : null;
   const monedaNorm = moneda ? normalizarMoneda(moneda) : null;
 
-  const coincide = (v) => {
+  const coincide = (item) => {
+    const v = item.filtro;
+    if (palabrasBusqueda.length && !palabrasBusqueda.every((p) => normalizar(v.nombre).includes(p))) return false;
     if (tipoNorm && v.tipo !== tipoNorm) return false;
     if (marcaNorm && !normalizar(v.marca).includes(marcaNorm)) return false;
     if (anioMinEfectivo != null && v.anio < anioMinEfectivo) return false;
@@ -179,24 +183,10 @@ async function buscarVehiculos(filtro = {}) {
   const matches = items.filter(coincide);
   const tope = mostrar_todos ? matches.length : Math.min(Math.max(Number(limite) || 6, 1), 10);
   return {
-    resultados: matches.slice(0, tope),
+    resultados: matches.slice(0, tope).map((v) => v.datos),
     total_matches: matches.length,
     presupuesto_ignorado: presupuesto_max != null && !monedaNorm, // aviso: no se pudo filtrar por precio
   };
 }
 
-// Prepara el JSON del prompt a partir del raw de la API: excluye vendidos y
-// campos pesados que el modelo no necesita, y agrega el enlace de cada unidad.
-// El filtrado numérico sigue usando los items normalizados de obtenerStock().
-async function obtenerTextoStock() {
-  await obtenerStock();
-  const data = (_cache.raw.data || [])
-    .filter((v) => v.disponibilidad !== "Vendido")
-    .map(prepararItemParaPrompt);
-  if (!data.length) {
-    return "STOCK: no se pudo cargar el stock en este momento. Si te preguntan por vehículos o precios, pedí disculpas y ofrecé derivar la consulta a un asesor.";
-  }
-  return JSON.stringify(data);
-}
-
-export { buscarVehiculos, obtenerTextoStock };
+export { buscarVehiculos };

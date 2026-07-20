@@ -19,13 +19,9 @@
 //                ver negocios.js. Evita que cada turno dispare una ronda extra sin caché.)
 //   - "autos"  → buscar_vehiculo (filtra el stock EN VIVO de Usados y Nuevos Tucumán —
 //                traído de su API real y cacheado en memoria, ver lib/autosStock.js —
-//                por año/km/presupuesto con comparaciones numéricas EXACTAS. El STOCK
-//                también se inyecta como texto en el prompt (api/autos.js, mismo patrón
-//                que api/catalogo.js) para que el modelo pueda "ojear" el catálogo, pero
-//                cualquier filtro con número de por medio (años, km, presupuesto) tiene
-//                que pasar por esta tool: dejarlo en manos del modelo leyendo la lista de
-//                texto es justamente el bug que esto arregla — "SUV con menos de 80.000 km"
-//                devolviendo una con 110.000.)
+//                y es la única fuente de datos de unidades. Toda consulta de stock,
+//                general o numérica, pasa por esta herramienta; el prompt del sistema
+//                sólo contiene personalidad y reglas comerciales.)
 //
 // PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
 // flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
@@ -527,19 +523,20 @@ async function ejecutarCrearPedido(input) {
 const TOOL_BUSCAR_VEHICULO = {
   name: "buscar_vehiculo",
   description:
-    "Filtra el stock REAL de vehículos por año/antigüedad, kilómetros, presupuesto, tipo, marca, transmisión y/o combustible, con comparaciones numéricas EXACTAS. " +
-    "OBLIGATORIA para cualquier búsqueda que tenga un número de por medio (ej: 'menos de 5 años', 'menos de 80.000 km', 'hasta $35.000.000'): NUNCA filtres vos mismo leyendo el STOCK del prompt para esos casos, porque leyendo una lista larga es fácil que se cuele una unidad fuera de rango. " +
-    "El STOCK del prompt sirve para responder consultas SIN número (ej: '¿qué SUV tenés?', '¿tenés Toyota?') o para dar contexto general, pero en cuanto aparece un año/antigüedad, km o presupuesto, usá esta tool.",
+    "ÚNICA fuente de stock. Es OBLIGATORIA para cualquier consulta sobre vehículos disponibles, incluso búsquedas generales sin números, consultas por marca/modelo/versión y preguntas de seguimiento sobre una unidad ya mencionada. " +
+    "Filtra el stock REAL por texto libre, año/antigüedad, kilómetros, presupuesto, tipo, marca, transmisión y combustible. Para localizar un modelo o versión usá 'busqueda'. Nunca respondas datos de stock sin consultar esta herramienta. " +
+    "Cada resultado conserva todos los campos disponibles de la API, incluido motor, salvo imagen_url, galeria, descripcion y fecha_creacion.",
   input_schema: {
     type: "object",
     properties: {
+      busqueda: { type: "string", description: "Texto libre para buscar por marca, modelo y/o versión, ej: 'Haval H6 GT', 'Nivus Comfortline' o 'Corolla Cross'." },
       tipo: { type: "string", description: "Tipo de vehículo: 'pickup', 'suv', 'sedan' o 'hatchback'. Omitilo para buscar en todos." },
       marca: { type: "string", description: "Marca a filtrar, ej: 'Toyota', 'Ford'." },
       antiguedad_max_anios: { type: "integer", description: "Antigüedad máxima en años (ej: 5 para 'menos de 5 años'). Se calcula contra el año actual real, no el que vos creas que es." },
       anio_min: { type: "integer", description: "Año mínimo exacto del modelo, si el cliente dio un año puntual en vez de una antigüedad (ej: '2020 en adelante')." },
       km_max: { type: "integer", description: "Kilometraje máximo (ej: 80000 para 'menos de 80.000 km')." },
-      presupuesto_max: { type: "number", description: "Presupuesto máximo. SIEMPRE mandá también 'moneda' junto con esto, o no se puede filtrar por precio." },
-      moneda: { type: "string", description: "'$' (pesos) o 'USD' (dólares) — la moneda del presupuesto_max. Fijate en qué moneda está el vehículo que le interesa antes de asumir una." },
+      presupuesto_max: { type: "number", description: "Presupuesto máximo expresado como monto completo. Convertí 34M, 34 m o 34 millones a 34000000." },
+      moneda: { type: "string", enum: ["$", "USD"], description: "Moneda del presupuesto. Pesos, ARS, '$', 'M', 'm' o 'millones' se mandan como '$' sin pedir confirmación. Preguntá sólo si el usuario dio un monto realmente ambiguo." },
       transmision: { type: "string", description: "'manual' o 'automatica'." },
       combustible: { type: "string", description: "'nafta', 'diesel', 'hibrido' o 'electrico'." },
       incluir_vendidos: { type: "boolean", description: "Por defecto NO se incluyen las unidades [VENDIDO]. Poné true solo si el cliente pregunta explícitamente por algo que ya sabés que está vendido." },
@@ -549,9 +546,27 @@ const TOOL_BUSCAR_VEHICULO = {
   },
 };
 
-async function ejecutarBuscarVehiculo(input) {
+function prepararFiltroPresupuesto(input, mensajeUsuario) {
+  const filtro = { ...(input || {}) };
+  const texto = String(mensajeUsuario || "");
+  const millones = texto.match(/(?:^|[^\d])(\d+(?:[.,]\d+)?)\s*(?:m\b|millones?\b)/i);
+  if (millones) {
+    const cantidad = Number(millones[1].replace(",", "."));
+    if (Number.isFinite(cantidad)) filtro.presupuesto_max = Math.round(cantidad * 1_000_000);
+    filtro.moneda = "$";
+    return filtro;
+  }
+  if (filtro.presupuesto_max != null && !filtro.moneda) {
+    if (/\b(?:usd|d[oó]lares?|u\$s)\b/i.test(texto)) filtro.moneda = "USD";
+    else if (/\b(?:pesos?|ars)\b|\$/i.test(texto)) filtro.moneda = "$";
+  }
+  return filtro;
+}
+
+async function ejecutarBuscarVehiculo(input, ctx) {
   try {
-    const r = await buscarVehiculos(input || {});
+    const filtro = prepararFiltroPresupuesto(input, ctx?.ultimoMensajeUsuario);
+    const r = await buscarVehiculos(filtro);
     return JSON.stringify(r);
   } catch (e) {
     return JSON.stringify({ error: "No se pudo filtrar el stock en este momento." });
@@ -574,7 +589,7 @@ async function ejecutarTool(name, input, ctx) {
   if (name === "verificar_disponibilidad") return ejecutarVerificarDisponibilidad(input);
   if (name === "registrar_pedido") return ejecutarRegistrarPedido(input);
   if (name === "crear_pedido") return ejecutarCrearPedido(input);
-  if (name === "buscar_vehiculo") return ejecutarBuscarVehiculo(input);
+  if (name === "buscar_vehiculo") return ejecutarBuscarVehiculo(input, ctx);
   return JSON.stringify({ error: "Herramienta desconocida." });
 }
 
@@ -859,7 +874,7 @@ export default async function handler(req, res) {
     }
 
     const tools = toolsPara(agente, cineId);
-    const ctx = { cineId };
+    const ctx = { cineId, ultimoMensajeUsuario: ultimoMensajeUsuario(messages) };
     const convo = podarHistorial(messages);
 
     // Router: elegimos la categoría del último mensaje (y con ella, el modelo).
@@ -877,6 +892,7 @@ export default async function handler(req, res) {
           console.error("db:", e.message);
         }
       }
+      const costoTurno = costoUsd(MODEL_ROUTER, routerUsage);
       await registrarLog({
         convId,
         negocio,
@@ -887,7 +903,7 @@ export default async function handler(req, res) {
         inputTokens: 0,
         outputTokens: 0,
         cacheReadTokens: 0,
-        costUsd: Math.round(costoUsd(MODEL_ROUTER, routerUsage) * 1e6) / 1e6,
+        costUsd: Math.round(costoTurno * 1e6) / 1e6,
       });
       return res.status(200).json({ content: [{ type: "text", text: texto }], derivar: true, ultimoId });
     }

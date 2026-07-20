@@ -332,7 +332,7 @@
     document.getElementById('st').textContent = NEGOCIO.estado;
     document.title = NEGOCIO.nombre + ' — Demo WhatsApp';
 
-    let history = []; // {role, content}
+    let history = [];
     function hora() { const d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0') }
     async function copiarRaw(texto) {
       const raw = String(texto ?? '');
@@ -352,10 +352,7 @@
         if (!copiado) throw new Error('No se pudo copiar el mensaje');
       }
     }
-    function burbuja(txt, tipo) {
-      const raw = String(txt ?? '');
-      const b = document.createElement('div'); b.className = 'bub wa-text ' + tipo;
-      b.innerHTML = formatearWhatsApp(raw) + '<span class="tm">' + hora() + (tipo === 'out' ? '' : ' ✓✓') + '</span>';
+    function crearBotonCopiar(raw) {
       const copiar = document.createElement('button');
       copiar.type = 'button';
       copiar.className = 'bub-copy';
@@ -384,7 +381,13 @@
           }, 1200);
         }
       });
-      b.appendChild(copiar);
+      return copiar;
+    }
+    function burbuja(txt, tipo) {
+      const raw = String(txt ?? '');
+      const b = document.createElement('div'); b.className = 'bub wa-text ' + tipo;
+      b.innerHTML = formatearWhatsApp(raw) + '<span class="tm">' + hora() + (tipo === 'out' ? '' : ' ✓✓') + '</span>';
+      b.appendChild(crearBotonCopiar(raw));
       body.appendChild(b); body.scrollTop = body.scrollHeight; return b;
     }
     function typing(on) {
@@ -396,7 +399,6 @@
       chipsEl.innerHTML = '';
       NEGOCIO.chips.forEach(c => { const el = document.createElement('button'); el.className = 'chip'; el.textContent = c; el.onclick = () => { inp.value = c; enviar(); }; chipsEl.appendChild(el); });
     }
-
     // CAPA 0 (ahorro de costos): si el PRIMER mensaje del cliente es un saludo
     // "puro" (sin ningún pedido/pregunta enganchado), respondemos con un menú
     // numerado armado con los chips del negocio, sin llamar a /api/chat — así
@@ -429,11 +431,6 @@
           .then(r => r.json())
           .then(d => NEGOCIO.promptBase.replace('{{CATALOGO}}', d.texto || 'CATÁLOGO: no disponible en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'))
           .catch(() => NEGOCIO.promptBase.replace('{{CATALOGO}}', 'CATÁLOGO: no se pudo cargar en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'));
-      } else if (NEGOCIO.agente === 'autos') {
-        _systemPromise = fetch('/api/autos')
-          .then(r => r.json())
-          .then(d => NEGOCIO.promptBase.replace('{{STOCK}}', d.texto || 'STOCK: no disponible en este momento. Si te preguntan por vehículos o precios, pedí disculpas y ofrecé derivar la consulta a un asesor.'))
-          .catch(() => NEGOCIO.promptBase.replace('{{STOCK}}', 'STOCK: no se pudo cargar en este momento. Si te preguntan por vehículos o precios, pedí disculpas y ofrecé derivar la consulta a un asesor.'));
       } else {
         _systemPromise = Promise.resolve(NEGOCIO.prompt);
       }
@@ -469,6 +466,11 @@
       }, 3000);
     }
 
+    function textoRespuesta(data) {
+      return (data.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n') ||
+        'Perdón, no pude responder. ¿Lo repetís?';
+    }
+
     async function responder() {
       typing(true);
       try {
@@ -492,7 +494,7 @@
           empezarPoll();
           return;
         }
-        const txt = (data.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n') || "Perdón, no pude responder. ¿Lo repetís?";
+        const txt = textoRespuesta(data);
         burbuja(txt, 'in');
         history.push({ role: 'assistant', content: txt });
         if (data.derivar) {
@@ -531,7 +533,7 @@
     burbuja(NEGOCIO.saludo, 'in');
     history.push({ role: 'assistant', content: NEGOCIO.saludo });
     chips();
-    getSystem(); // precargamos la cartelera en vivo (si el negocio la usa)
+    getSystem(); // precargamos el contexto fijo, la cartelera o el catálogo.
   </script>
 </body>
 
