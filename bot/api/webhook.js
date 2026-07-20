@@ -1,5 +1,6 @@
 import { responder } from "../lib/router.js";
 import { enviarTexto } from "../lib/whatsapp.js";
+import { nombreCanal } from "../lib/config.js";
 import { upsertConversacion, getConversacion, setEstado, agregarMensaje, historialParaModelo } from "../lib/db.js";
 
 export default async function handler(req, res) {
@@ -29,8 +30,9 @@ export default async function handler(req, res) {
       const numero = msg.from;
       const texto = msg.text.body;
       const nombreContacto = value?.contacts?.[0]?.profile?.name || null;
+      const canal = value?.metadata?.phone_number_id || process.env.PHONE_NUMBER_ID || null;
 
-      await upsertConversacion(numero, nombreContacto);
+      await upsertConversacion(numero, nombreContacto, canal, nombreCanal(canal));
       await agregarMensaje(numero, "user", texto);
 
       // Si una persona ya está atendiendo esta conversación desde el backoffice,
@@ -44,7 +46,7 @@ export default async function handler(req, res) {
       await agregarMensaje(numero, "assistant", respuesta);
       if (derivar) await setEstado(numero, "humano");
 
-      await enviarTexto(numero, respuesta);
+      await enviarTexto(numero, respuesta, conv?.canal || canal);
     } catch (e) {
       console.error("Error procesando mensaje:", e);
     }

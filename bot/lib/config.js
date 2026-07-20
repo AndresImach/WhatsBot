@@ -46,3 +46,20 @@ export const MODELOS = {
   clasificador: "claude-haiku-4-5", // rápido y barato: decide qué hacer
   principal: "claude-sonnet-5",     // responde al cliente
 };
+
+// ═══════════════════════════════════════════════════════════════
+//  CANALES — bandeja unificada (opcional)
+// ═══════════════════════════════════════════════════════════════
+// Si el negocio tiene más de un número de WhatsApp mandando al mismo webhook
+// (ej. "Local Centro" y "Local Norte" bajo la misma WABA/token), ponés acá el
+// nombre de cada uno. La clave es el Phone Number ID de Meta (API Setup).
+// El backoffice te deja filtrar por canal y contesta por el número correcto.
+// Si dejás esto vacío, todo entra bajo un solo canal con el nombre de NEGOCIO.nombre.
+export const CANALES = {
+  // "123456789012345": "Local Centro",
+  // "987654321098765": "Local Norte",
+};
+
+export function nombreCanal(phoneNumberId) {
+  return CANALES[phoneNumberId] || NEGOCIO.nombre;
+}
