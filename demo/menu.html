@@ -36,7 +36,7 @@
     Object.entries(NEGOCIOS).forEach(([slug, n]) => {
       const a = document.createElement('a');
       a.className = 'card';
-      a.href = 'index.html?n=' + encodeURIComponent(slug);
+      a.href = '/?n=' + encodeURIComponent(slug);
       a.innerHTML =
         '<div class="av">' + n.avatar + '</div>' +
         '<div class="info"><div class="nm">' + n.nombre + '</div></div>' +
