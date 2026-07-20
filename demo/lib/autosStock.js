@@ -13,24 +13,17 @@
 // que la comparación numérica la haga código (acá abajo), no el modelo.
 
 const USADOS_API_URL = "https://usadosynuevostucuman.com/wp-admin/admin-ajax.php?action=usados_filter_vehicles";
+const USADOS_BASE_URL = "https://usadosynuevostucuman.com";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos: stock real, no hace falta más fresco que esto.
 
-const TIPO_A_HEADER = [
-  ["pickup", "PICK UPS / CAMIONETAS"],
-  ["suv", "SUVS"],
-  ["sedan", "SEDANES"],
-  ["hatchback", "HATCHBACKS"],
-];
 const TIPO_API_A_INTERNO = { "PICK UP": "pickup", SUV: "suv", SEDAN: "sedan", HATCHBACK: "hatchback" };
 const DISPONIBILIDAD_API_A_INTERNO = {
   "Stock Físico": "stock",
   "Consultar Disponibilidad": "consultar",
   Vendido: "vendido",
 };
-const DISPONIBILIDAD_A_TAG = { stock: "STOCK", consultar: "CONSULTAR", vendido: "VENDIDO" };
-const COMBUSTIBLE_A_DISPLAY = { nafta: "Nafta", diesel: "Diésel", hibrido: "Híbrido", electrico: "Eléctrico" };
 
-let _cache = null; // { items, ts }
+let _cache = null; // { raw, items, ts }
 
 function normalizar(s) {
   return String(s || "")
@@ -63,8 +56,22 @@ function normalizarTipo(s) {
   return n;
 }
 
-function formatearNumero(n) {
-  return Number(n).toLocaleString("es-AR");
+function slugUrl(s) {
+  return normalizar(s)
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function prepararItemParaPrompt(raw) {
+  const { imagen_url, galeria, descripcion, fecha_creacion, ...item } = raw;
+  const segmentos = [raw.marca, raw.modelo];
+  if (String(raw.version || "").trim()) segmentos.push(raw.version);
+  segmentos.push(raw.id);
+  return {
+    ...item,
+    link_url: `${USADOS_BASE_URL}/vehiculo/${segmentos.map(slugUrl).join("/")}/`,
+  };
 }
 
 // La API manda 'precio' (texto, ej "$30.500.000" / "38.000 USD" / "$ (Consultar)")
@@ -103,9 +110,9 @@ async function obtenerStock() {
   if (_cache && ahora - _cache.ts < CACHE_TTL_MS) return _cache.items;
   try {
     const r = await fetch(USADOS_API_URL);
-    const data = await r.json();
-    const items = (data.data || []).map(mapearItem).filter((v) => v.tipo && v.anio);
-    _cache = { items, ts: ahora };
+    const raw = await r.json();
+    const items = (raw.data || []).map(mapearItem).filter((v) => v.tipo && v.anio);
+    _cache = { raw, items, ts: ahora };
     return items;
   } catch (e) {
     if (_cache) return _cache.items;
@@ -173,36 +180,18 @@ async function buscarVehiculos(filtro = {}) {
   };
 }
 
-// Arma el bloque STOCK como texto para el prompt (consultas SIN número: "¿qué
-// SUV tenés?", "¿tenés Toyota?"). El filtrado con número siempre pasa por
-// buscarVehiculos, nunca por esta lista.
-function formatearTexto(items) {
-  const bloques = TIPO_A_HEADER.map(([tipo, header]) => {
-    const del_tipo = items.filter((v) => v.tipo === tipo);
-    if (!del_tipo.length) return null;
-    const lineas = del_tipo.map((v) => {
-      const km = v.km != null ? `${formatearNumero(v.km)} km` : "km a consultar";
-      const combustible = v.combustible ? ` · ${COMBUSTIBLE_A_DISPLAY[v.combustible] || v.combustible}` : "";
-      const precio = v.precio != null ? (v.moneda === "USD" ? `USD ${formatearNumero(v.precio)}` : `$${formatearNumero(v.precio)}`) : "precio a consultar";
-      const tag = DISPONIBILIDAD_A_TAG[v.disponibilidad] || "CONSULTAR";
-      return `- ${v.nombre} — ${v.anio} · ${km} · ${v.transmision === "manual" ? "Manual" : "Automática"}${combustible} · ${precio} · [${tag}]`;
-    });
-    return `${header}:\n${lineas.join("\n")}`;
-  }).filter(Boolean);
-  return bloques.join("\n\n");
-}
-
+// Prepara el JSON del prompt a partir del raw de la API: excluye vendidos y
+// campos pesados que el modelo no necesita, y agrega el enlace de cada unidad.
+// El filtrado numérico sigue usando los items normalizados de obtenerStock().
 async function obtenerTextoStock() {
-  const items = (await obtenerStock()).filter((v) => v.disponibilidad !== "vendido");
-  if (!items.length) {
+  await obtenerStock();
+  const data = (_cache.raw.data || [])
+    .filter((v) => v.disponibilidad !== "Vendido")
+    .map(prepararItemParaPrompt);
+  if (!data.length) {
     return "STOCK: no se pudo cargar el stock en este momento. Si te preguntan por vehículos o precios, pedí disculpas y ofrecé derivar la consulta a un asesor.";
   }
-  return (
-    "STOCK ACTUAL EN VIVO (precios orientativos, NO contractuales; un asesor confirma precio y disponibilidad final). " +
-    'Precios con "$" son en PESOS, con "USD" en DÓLARES. Disponibilidad: [STOCK] = disponible en showroom · [CONSULTAR] = consultar disponibilidad. ' +
-    "Las unidades ya vendidas NO figuran en esta lista — si el cliente pregunta puntualmente por una que no aparece, puede estar vendida; usá la tool \"buscar_vehiculo\" con 'incluir_vendidos' para confirmarlo.\n\n" +
-    formatearTexto(items)
-  );
+  return JSON.stringify(data);
 }
 
 export { buscarVehiculos, obtenerTextoStock };

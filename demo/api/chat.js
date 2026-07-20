@@ -876,7 +876,7 @@ export default async function handler(req, res) {
           console.error("db:", e.message);
         }
       }
-      registrarLog({
+      await registrarLog({
         convId,
         negocio,
         agente,
@@ -937,9 +937,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // Registro del turno (costo = handler + router). No bloquea la respuesta.
+    // Registro del turno (costo = handler + router). Esperamos la escritura para
+    // que el runtime no termine antes de persistirla; registrarLog absorbe errores.
     const costoTurno = costoUsd(model, handlerUsage) + costoUsd(MODEL_ROUTER, routerUsage);
-    registrarLog({
+    await registrarLog({
       convId,
       negocio,
       agente,
