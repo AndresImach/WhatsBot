@@ -129,6 +129,7 @@ async function buscarVehiculos(filtro = {}) {
     combustible,
     incluir_vendidos,
     limite,
+    mostrar_todos,
   } = filtro;
 
   const items = await obtenerStock();
@@ -164,7 +165,7 @@ async function buscarVehiculos(filtro = {}) {
   };
 
   const matches = items.filter(coincide);
-  const tope = Math.min(Math.max(Number(limite) || 6, 1), 10);
+  const tope = mostrar_todos ? matches.length : Math.min(Math.max(Number(limite) || 6, 1), 10);
   return {
     resultados: matches.slice(0, tope),
     total_matches: matches.length,

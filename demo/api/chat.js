@@ -542,7 +542,8 @@ const TOOL_BUSCAR_VEHICULO = {
       transmision: { type: "string", description: "'manual' o 'automatica'." },
       combustible: { type: "string", description: "'nafta', 'diesel', 'hibrido' o 'electrico'." },
       incluir_vendidos: { type: "boolean", description: "Por defecto NO se incluyen las unidades [VENDIDO]. Poné true solo si el cliente pregunta explícitamente por algo que ya sabés que está vendido." },
-      limite: { type: "integer", description: "Máximo de resultados a devolver (por defecto 6, máximo 10). Mostrale al cliente 2 a 4 y avisale si hay más (usá 'total_matches')." },
+      limite: { type: "integer", description: "Máximo de resultados a devolver (por defecto 6, máximo 10). Si 'total_matches' da más de 6, no uses esto para traer más: primero preguntale al cliente cómo acotar la búsqueda (ver instrucciones del sistema)." },
+      mostrar_todos: { type: "boolean", description: "Poné true SOLO si el cliente pidió explícitamente ver TODAS las opciones disponibles (ej: 'mostrame todas', 'quiero ver todas las que tengan'), sin importar cuántas sean. Ignora 'limite' y devuelve todas las coincidencias sin recortar." },
     },
   },
 };
