@@ -17,13 +17,15 @@
 //   - "pwa"    → crear_pedido (el catálogo NO es una tool: se trae una sola vez por
 //                conversación en api/catalogo.js y se inyecta en el prompt del sistema,
 //                ver negocios.js. Evita que cada turno dispare una ronda extra sin caché.)
-//   - "autos"  → buscar_vehiculo (filtra el stock de Usados y Nuevos Tucumán por año/km/
-//                presupuesto con comparaciones numéricas EXACTAS — ver lib/autosStock.js.
-//                El STOCK también está pegado como texto en el prompt para que el modelo
-//                pueda "ojear" el catálogo, pero cualquier filtro con número de por medio
-//                (años, km, presupuesto) tiene que pasar por esta tool: dejarlo en manos
-//                del modelo leyendo 74 líneas de texto es justamente el bug que esto
-//                arregla — "SUV con menos de 80.000 km" devolviendo una con 110.000.)
+//   - "autos"  → buscar_vehiculo (filtra el stock EN VIVO de Usados y Nuevos Tucumán —
+//                traído de su API real y cacheado en memoria, ver lib/autosStock.js —
+//                por año/km/presupuesto con comparaciones numéricas EXACTAS. El STOCK
+//                también se inyecta como texto en el prompt (api/autos.js, mismo patrón
+//                que api/catalogo.js) para que el modelo pueda "ojear" el catálogo, pero
+//                cualquier filtro con número de por medio (años, km, presupuesto) tiene
+//                que pasar por esta tool: dejarlo en manos del modelo leyendo la lista de
+//                texto es justamente el bug que esto arregla — "SUV con menos de 80.000 km"
+//                devolviendo una con 110.000.)
 //
 // PROMPT CACHING: el prompt del sistema es SOLO contextual (personalidad, reglas,
 // flujos). El esquema de la base y las credenciales viven acá, no en el prompt.
@@ -547,7 +549,7 @@ const TOOL_BUSCAR_VEHICULO = {
 
 async function ejecutarBuscarVehiculo(input) {
   try {
-    const r = buscarVehiculos(input || {});
+    const r = await buscarVehiculos(input || {});
     return JSON.stringify(r);
   } catch (e) {
     return JSON.stringify({ error: "No se pudo filtrar el stock en este momento." });

@@ -342,6 +342,11 @@
           .then(r => r.json())
           .then(d => NEGOCIO.promptBase.replace('{{CATALOGO}}', d.texto || 'CATÁLOGO: no disponible en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'))
           .catch(() => NEGOCIO.promptBase.replace('{{CATALOGO}}', 'CATÁLOGO: no se pudo cargar en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'));
+      } else if (NEGOCIO.agente === 'autos') {
+        _systemPromise = fetch('/api/autos')
+          .then(r => r.json())
+          .then(d => NEGOCIO.promptBase.replace('{{STOCK}}', d.texto || 'STOCK: no disponible en este momento. Si te preguntan por vehículos o precios, pedí disculpas y ofrecé derivar la consulta a un asesor.'))
+          .catch(() => NEGOCIO.promptBase.replace('{{STOCK}}', 'STOCK: no se pudo cargar en este momento. Si te preguntan por vehículos o precios, pedí disculpas y ofrecé derivar la consulta a un asesor.'));
       } else {
         _systemPromise = Promise.resolve(NEGOCIO.prompt);
       }
