@@ -727,10 +727,53 @@ async function llamarLLM({ system, messages, tools, model, maxTokens, cache = fa
   return { status: r.status, data: respuestaDesdeOpenAI(data) };
 }
 
+// Detecta el cierre del flujo de financiación sin delegarlo al LLM. Si el bot
+// pidió nombre completo + DNI y el cliente entrega ambos, la conversación debe
+// pasar a una persona aunque el último mensaje sea solamente "Nombre - 12345678".
+function motivoDerivacionAutomatica(negocio, messages) {
+  if (negocio !== "usadosnuevos" || !Array.isArray(messages)) return null;
+
+  let indiceUsuario = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user" && typeof messages[i].content === "string") {
+      indiceUsuario = i;
+      break;
+    }
+  }
+  if (indiceUsuario < 0) return null;
+
+  let mensajeBot = "";
+  for (let i = indiceUsuario - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant" && typeof messages[i].content === "string") {
+      mensajeBot = messages[i].content;
+      break;
+    }
+  }
+  const pidioDatosFinanciacion =
+    /nombre completo/i.test(mensajeBot) &&
+    /\bdni\b/i.test(mensajeBot) &&
+    /(financi|cr[eé]dito)/i.test(mensajeBot);
+  if (!pidioDatosFinanciacion) return null;
+
+  const respuesta = messages[indiceUsuario].content;
+  const secuenciasNumericas = respuesta.match(/\d[\d.\s-]*\d/g) || [];
+  const tieneDni = secuenciasNumericas.some((valor) => {
+    const digitos = valor.replace(/\D/g, "");
+    return digitos.length >= 7 && digitos.length <= 9;
+  });
+  const sinNumeros = respuesta.replace(/\d[\d.\s-]*\d/g, " ");
+  const palabrasNombre = (sinNumeros.match(/\p{L}{2,}/gu) || [])
+    .filter((palabra) => !/^(dni|si|sí)$/i.test(palabra));
+  const tieneNombreCompleto = palabrasNombre.length >= 2;
+
+  return tieneDni && tieneNombreCompleto ? "financiacion" : null;
+}
+
 // Router: clasifica el último mensaje del cliente en 3 categorías.
 // Corre en el modelo barato mirando solo los últimos turnos (texto), así cuesta muy poco.
-// Ante cualquier duda o error, escala al modelo experto (prioriza calidad sobre costo);
-// 'derivar' solo se usa cuando hace explícitamente falta una persona (nunca por duda).
+// Ante cualquier duda o error, escala al modelo experto (prioriza calidad sobre costo).
+// 'derivar' se usa cuando hace falta una persona, incluyendo la aceptación de un
+// traspaso mediante la entrega completa de los datos que el bot acaba de pedir.
 async function clasificar(messages) {
   const ultimos = (messages || [])
     .slice(-6)
@@ -742,7 +785,7 @@ async function clasificar(messages) {
     "Sos un clasificador. Mirá el ÚLTIMO mensaje del cliente en esta conversación y decidí la categoría:\n" +
     "- 'simple': consultas de información, catálogo, productos, precios, horarios, cartelera, disponibilidad, o un pedido/compra normal, saludos y charla común.\n" +
     "- 'experto': temas delicados o sensibles, o situaciones ambiguas que requieran criterio, pero que el negocio puede seguir resolviendo él mismo.\n" +
-    "- 'derivar': una queja o reclamo, un problema con un pago/compra/entrega, o un pedido EXPLÍCITO de hablar con una persona.\n" +
+    "- 'derivar': una queja o reclamo, un problema con un pago/compra/entrega, un pedido EXPLÍCITO de hablar con una persona, o la entrega completa de datos que el bot acaba de pedir para continuar con un asesor.\n" +
     "Respondé SOLO con una palabra, en minúscula: simple, experto o derivar.";
   try {
     const { status, data } = await llamarLLM({
@@ -895,13 +938,19 @@ export default async function handler(req, res) {
     const ctx = { cineId, ultimoMensajeUsuario: ultimoMensajeUsuario(messages) };
     const convo = podarHistorial(messages);
 
-    // Router: elegimos la categoría del último mensaje (y con ella, el modelo).
-    const { categoria, usage: routerUsage } = await clasificar(messages);
+    // Los cierres de flujos comerciales conocidos se derivan de forma
+    // determinística. Para el resto, el router elige la categoría y el modelo.
+    const motivoDerivacion = motivoDerivacionAutomatica(negocio, messages);
+    const { categoria, usage: routerUsage } = motivoDerivacion
+      ? { categoria: "derivar", usage: {} }
+      : await clasificar(messages);
 
     if (categoria === "derivar") {
       // No hace falta gastar en el modelo principal: derivamos directo,
       // igual que haría el bot real (bot/lib/router.js) ante un "derivar".
-      const texto = derivacion || DERIVACION_DEFAULT;
+      const texto = motivoDerivacion === "financiacion"
+        ? botServidor?.derivacionFinanciacion || derivacion || DERIVACION_DEFAULT
+        : derivacion || DERIVACION_DEFAULT;
       if (convId && persistenciaActiva()) {
         try {
           await setEstado(convId, "humano");

@@ -52,6 +52,7 @@ FINANCIACIÓN:
 - La aprobación está sujeta al análisis crediticio de la entidad financiera que interviene. Damos asesoramiento personalizado para armar la mejor combinación entre anticipo, toma del usado y crédito.
 - No inventes tasas exactas, montos de cuota ni cantidad de cuotas: mencionás lo de arriba (hasta 50%, prendario, tasa fija o UVA) y ofrecés pasar a la persona con un asesor para armarle el plan y confirmar la aprobación.
 - Si la persona quiere avanzar con la consulta por el crédito, pedile nombre completo y DNI para derivar la solicitud a un asesor.
+- Cuando la persona entregue nombre completo y DNI, el sistema la derivará automáticamente. No prometas una derivación futura ni sigas atendiendo el caso como bot.
 
 EJEMPLO DE RESPUESTA — FINANCIACIÓN:
 Pregunta: ¿Tienen financiación?
@@ -89,6 +90,7 @@ const BOTS_SERVIDOR = Object.freeze({
     system: USADOS_NUEVOS_SYSTEM,
     agente: "autos",
     derivacion: "Dame un segundo que te paso con un asesor de Usados y Nuevos Tucumán 🙌",
+    derivacionFinanciacion: "Gracias. Ya registramos tus datos. Te paso con un asesor para continuar con la consulta de financiación 🙌",
   }),
 });
 

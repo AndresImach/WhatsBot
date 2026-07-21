@@ -10,6 +10,25 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+function tursoResponse(columnas = [], filas = []) {
+  const celda = (valor) => {
+    if (valor === null || valor === undefined) return { type: "null", value: null };
+    if (typeof valor === "number") return { type: "integer", value: String(valor) };
+    return { type: "text", value: String(valor) };
+  };
+  return jsonResponse({
+    results: [{
+      type: "ok",
+      response: {
+        result: {
+          cols: columnas.map((name) => ({ name })),
+          rows: filas.map((fila) => fila.map(celda)),
+        },
+      },
+    }],
+  });
+}
+
 test("autos usa configuración server-side, consulta la herramienta única y normaliza 34M", async () => {
   const fetchOriginal = global.fetch;
   const requestsLlm = [];
@@ -165,5 +184,73 @@ test("autos ignora una derivación manipulada por el cliente", async () => {
     );
   } finally {
     global.fetch = fetchOriginal;
+  }
+});
+
+test("financiación deriva realmente al recibir nombre completo y DNI", async () => {
+  const fetchOriginal = global.fetch;
+  const databaseUrlOriginal = process.env.LOG_TURSO_DATABASE_URL;
+  const authTokenOriginal = process.env.LOG_TURSO_AUTH_TOKEN;
+  process.env.LOG_TURSO_DATABASE_URL = "libsql://logs.test";
+  process.env.LOG_TURSO_AUTH_TOKEN = "test-token";
+  const sentencias = [];
+
+  global.fetch = async (url, init = {}) => {
+    const destino = String(url);
+    assert.match(destino, /logs\.test\/v2\/pipeline/);
+    const body = JSON.parse(init.body);
+    const sql = body.requests[0].stmt.sql;
+    sentencias.push(sql);
+
+    if (/^SELECT convId, negocio, estado/.test(sql)) {
+      return tursoResponse(
+        ["convId", "negocio", "estado", "asignadoA", "asignadoNombre", "etiquetas", "updatedAt"],
+        [["conv-financiacion", "usadosnuevos", "bot", null, null, null, "2026-07-21 13:47:00"]]
+      );
+    }
+    if (/^SELECT id FROM "DemoMensaje"/.test(sql)) {
+      return tursoResponse(["id"], [[42]]);
+    }
+    return tursoResponse();
+  };
+
+  try {
+    let statusCode = 0;
+    let payload;
+    const req = {
+      method: "POST",
+      body: {
+        messages: [
+          { role: "user", content: "¿Qué financiación tienen?" },
+          {
+            role: "assistant",
+            content: "La aprobación está sujeta al análisis crediticio. Si querés avanzar con el crédito necesito tu nombre completo y DNI.",
+          },
+          { role: "user", content: "Manuela Figueroa - 35685757" },
+        ],
+        negocio: "usadosnuevos",
+        convId: "conv-financiacion",
+      },
+    };
+    const res = {
+      status(code) { statusCode = code; return this; },
+      json(data) { payload = data; return data; },
+    };
+
+    await handler(req, res);
+
+    assert.equal(statusCode, 200);
+    assert.equal(payload.derivar, true);
+    assert.equal(
+      payload.content[0].text,
+      "Gracias. Ya registramos tus datos. Te paso con un asesor para continuar con la consulta de financiación 🙌"
+    );
+    assert.ok(sentencias.some((sql) => /UPDATE "DemoConversacion" SET estado = \?/.test(sql)));
+  } finally {
+    global.fetch = fetchOriginal;
+    if (databaseUrlOriginal === undefined) delete process.env.LOG_TURSO_DATABASE_URL;
+    else process.env.LOG_TURSO_DATABASE_URL = databaseUrlOriginal;
+    if (authTokenOriginal === undefined) delete process.env.LOG_TURSO_AUTH_TOKEN;
+    else process.env.LOG_TURSO_AUTH_TOKEN = authTokenOriginal;
   }
 });
