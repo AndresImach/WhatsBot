@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS "Conversacion" (
   asignadoA      INTEGER,           -- Agente.id que la tiene tomada (NULL = sin asignar)
   asignadoNombre TEXT,              -- denormalizado, igual que canalNombre
   etiquetas      TEXT,              -- "queja,vip" (comma-separated, sin espacios)
+  valoracion     TEXT,              -- 'positiva' | 'negativa' | NULL: 👍/👎 del agente sobre si el bot resolvió bien la conversación
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -70,3 +71,4 @@ CREATE TABLE IF NOT EXISTS "Atajo" (
 -- ALTER TABLE "Conversacion" ADD COLUMN asignadoA INTEGER;
 -- ALTER TABLE "Conversacion" ADD COLUMN asignadoNombre TEXT;
 -- ALTER TABLE "Conversacion" ADD COLUMN etiquetas TEXT;
+-- ALTER TABLE "Conversacion" ADD COLUMN valoracion TEXT;
