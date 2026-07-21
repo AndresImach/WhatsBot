@@ -727,53 +727,169 @@ async function llamarLLM({ system, messages, tools, model, maxTokens, cache = fa
   return { status: r.status, data: respuestaDesdeOpenAI(data) };
 }
 
-// Detecta el cierre del flujo de financiación sin delegarlo al LLM. Si el bot
-// pidió nombre completo + DNI y el cliente entrega ambos, la conversación debe
-// pasar a una persona aunque el último mensaje sea solamente "Nombre - 12345678".
-function motivoDerivacionAutomatica(negocio, messages) {
+function expresaIntencionVendedor(texto) {
+  return /(?:quiero|quisiera|necesito|me interesa|tengo)[^\n]{0,80}(?:vend|consign|entregar|que me compren)/i.test(texto) ||
+    /(?:auto|veh[ií]culo|camioneta|suv)[^\n]{0,50}(?:para\s+)?(?:vend|consign)/i.test(texto);
+}
+
+function contextoClienteVendedor(messages, indiceUsuario) {
+  let indiceIntencion = -1;
+  for (let i = indiceUsuario; i >= 0; i--) {
+    const mensaje = messages[i];
+    if (mensaje?.role === "user" && typeof mensaje.content === "string" && expresaIntencionVendedor(mensaje.content)) {
+      indiceIntencion = i;
+      break;
+    }
+  }
+  if (indiceIntencion < 0) return null;
+  const ultimoTextoUsuario = messages[indiceUsuario]?.content || "";
+  const huboSolicitudDeDatos = messages
+    .slice(indiceIntencion + 1, indiceUsuario)
+    .some((mensaje) =>
+      mensaje?.role === "assistant" &&
+      typeof mensaje.content === "string" &&
+      /\bmarca\b/i.test(mensaje.content) &&
+      /\bmodelo\b/i.test(mensaje.content) &&
+      /(a[nñ]o|kil[oó]metros?|kms?)/i.test(mensaje.content)
+    );
+  if (!expresaIntencionVendedor(ultimoTextoUsuario) && !huboSolicitudDeDatos) return null;
+  const texto = messages
+    .slice(indiceIntencion, indiceUsuario + 1)
+    .filter((mensaje) => mensaje?.role === "user" && typeof mensaje.content === "string")
+    .map((mensaje) => mensaje.content)
+    .join("\n");
+  return { indiceIntencion, texto };
+}
+
+function ultimoIndiceUsuario(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user" && typeof messages[i].content === "string") return i;
+  }
+  return -1;
+}
+
+function extraerAnioVehiculo(texto) {
+  const match = String(texto || "").match(/\b(19\d{2}|20\d{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function extraerKilometrosVehiculo(texto) {
+  const fuente = String(texto || "");
+  const match = fuente.match(/(?:kil[oó]metros?|kms?)\s*[:\-]?\s*(\d[\d.,]*)\s*(mil)?/i) ||
+    fuente.match(/(\d[\d.,]*)\s*(mil)?\s*(?:kil[oó]metros?|kms?)/i);
+  if (!match) return null;
+  if (match[2]) {
+    const miles = Number(match[1].replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(miles) ? Math.round(miles * 1000) : null;
+  }
+  const kilometros = Number(match[1].replace(/\D/g, ""));
+  return Number.isFinite(kilometros) ? kilometros : null;
+}
+
+export function motivoRechazoAutomatico(negocio, messages) {
+  if (negocio !== "usadosnuevos" || !Array.isArray(messages)) return null;
+  const indiceUsuario = ultimoIndiceUsuario(messages);
+  if (indiceUsuario < 0) return null;
+  const contexto = contextoClienteVendedor(messages, indiceUsuario);
+  if (!contexto) return null;
+  const anio = extraerAnioVehiculo(contexto.texto);
+  const kilometros = extraerKilometrosVehiculo(contexto.texto);
+  const fallaAnio = anio !== null && anio < 2020;
+  const fallaKilometros = kilometros !== null && kilometros > 90000;
+  if (fallaAnio && fallaKilometros) return "anio_y_kilometros";
+  if (fallaAnio) return "anio";
+  if (fallaKilometros) return "kilometros";
+  return null;
+}
+
+// Detecta cierres de flujos comerciales sin delegarlos al LLM. Cuando el bot
+// pidió datos para un traspaso y el cliente los completa, la conversación debe
+// pasar realmente a una persona aunque el último mensaje sea solo una ficha.
+export function motivoDerivacionAutomatica(negocio, messages) {
   if (negocio !== "usadosnuevos" || !Array.isArray(messages)) return null;
 
-  let indiceUsuario = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "user" && typeof messages[i].content === "string") {
-      indiceUsuario = i;
-      break;
-    }
-  }
+  const indiceUsuario = ultimoIndiceUsuario(messages);
   if (indiceUsuario < 0) return null;
 
-  let mensajeBot = "";
-  for (let i = indiceUsuario - 1; i >= 0; i--) {
-    if (messages[i]?.role === "assistant" && typeof messages[i].content === "string") {
-      mensajeBot = messages[i].content;
-      break;
+  function encontrarSolicitud(esSolicitud) {
+    for (let i = indiceUsuario - 1; i >= 0; i--) {
+      const mensaje = messages[i];
+      if (mensaje?.role === "assistant" && typeof mensaje.content === "string" && esSolicitud(mensaje.content)) {
+        return i;
+      }
     }
+    return -1;
   }
-  const pidioDatosFinanciacion =
-    /nombre completo/i.test(mensajeBot) &&
-    /\bdni\b/i.test(mensajeBot) &&
-    /(financi|cr[eé]dito)/i.test(mensajeBot);
-  if (!pidioDatosFinanciacion) return null;
+  function respuestasDesde(indiceSolicitud) {
+    return messages
+      .slice(indiceSolicitud + 1, indiceUsuario + 1)
+      .filter((mensaje) => mensaje?.role === "user" && typeof mensaje.content === "string")
+      .map((mensaje) => mensaje.content)
+      .join("\n");
+  }
 
-  const respuesta = messages[indiceUsuario].content;
-  const secuenciasNumericas = respuesta.match(/\d[\d.\s-]*\d/g) || [];
-  const tieneDni = secuenciasNumericas.some((valor) => {
-    const digitos = valor.replace(/\D/g, "");
-    return digitos.length >= 7 && digitos.length <= 9;
-  });
-  const sinNumeros = respuesta.replace(/\d[\d.\s-]*\d/g, " ");
-  const palabrasNombre = (sinNumeros.match(/\p{L}{2,}/gu) || [])
-    .filter((palabra) => !/^(dni|si|sí)$/i.test(palabra));
-  const tieneNombreCompleto = palabrasNombre.length >= 2;
+  const solicitudFinanciacion = encontrarSolicitud((texto) =>
+    /nombre completo/i.test(texto) &&
+    /\bdni\b/i.test(texto) &&
+    /(financi|cr[eé]dito)/i.test(texto)
+  );
+  if (solicitudFinanciacion >= 0) {
+    const respuesta = respuestasDesde(solicitudFinanciacion);
+    const secuenciasNumericas = respuesta.match(/\d[\d.\s-]*\d/g) || [];
+    const tieneDni = secuenciasNumericas.some((valor) => {
+      const digitos = valor.replace(/\D/g, "");
+      return digitos.length >= 7 && digitos.length <= 9;
+    });
+    const sinNumeros = respuesta.replace(/\d[\d.\s-]*\d/g, " ");
+    const palabrasNombre = (sinNumeros.match(/\p{L}{2,}/gu) || [])
+      .filter((palabra) => !/^(dni|si|sí)$/i.test(palabra));
+    if (tieneDni && palabrasNombre.length >= 2) return "financiacion";
+  }
 
-  return tieneDni && tieneNombreCompleto ? "financiacion" : null;
+  const contextoVendedor = contextoClienteVendedor(messages, indiceUsuario);
+  if (!contextoVendedor || motivoRechazoAutomatico(negocio, messages)) return null;
+  const respuestaVendedor = contextoVendedor.texto;
+  let tieneMarca = /\bmarca\s*[:\-]\s*\S+/i.test(respuestaVendedor);
+  let tieneModelo = /\bmodelo\s*[:\-]\s*\S+/i.test(respuestaVendedor);
+  let tieneVersion = /\bversi[oó]n\s*[:\-]\s*\S+/i.test(respuestaVendedor);
+  const lineas = respuestaVendedor.split(/\n+/);
+  for (let i = 0; i < lineas.length && !(tieneMarca && tieneModelo && tieneVersion); i++) {
+    if (!/(?:19\d{2}|20\d{2}|[\d.]+\s*(?:kil[oó]metros?|kms?))/i.test(lineas[i])) continue;
+    const candidata = `${i > 0 ? lineas[i - 1] : ""} ${lineas[i]}`
+      .replace(/(?:19\d{2}|20\d{2}).*$/i, " ")
+      .replace(/[\d.]+\s*(?:kil[oó]metros?|kms?).*$/i, " ");
+    const palabras = (candidata.match(/[\p{L}\d][\p{L}\d.-]*/gu) || [])
+      .filter((palabra) => !/^(quiero|quisiera|vender|vende|vend[eé]|consignar|consignaci[oó]n|entregar|entrega|dejar|dejarlo|mi|el|la|un|una|auto|veh[ií]culo|camioneta|suv|es|tengo|marca|modelo|versi[oó]n|a[nñ]o|con|de|del|en|para|que|me|lo|puedo|puede|pod[eé]s|agencia|compra|directa|directo)$/i.test(palabra));
+    if (!tieneMarca && palabras[0]) tieneMarca = true;
+    if (!tieneModelo && palabras[1]) tieneModelo = true;
+    if (!tieneVersion && palabras[2]) tieneVersion = true;
+  }
+  const tieneAnio = extraerAnioVehiculo(respuestaVendedor) !== null;
+  const tieneKilometros = extraerKilometrosVehiculo(respuestaVendedor) !== null;
+  const respondioAgencia =
+    /(?:dejar(?:lo)?|agencia)[^\n]{0,30}(?:s[ií]|no)(?:\s|$)/i.test(respuestaVendedor) ||
+    /(?:^|\s)(?:s[ií]|no)[^\n]{0,30}(?:dejar(?:lo)?|agencia)/i.test(respuestaVendedor);
+  const tieneObservaciones =
+    /\bobservaciones?\s*[:\-]\s*\S+/i.test(respuestaVendedor) ||
+    /\bsin\s+observaciones?\b/i.test(respuestaVendedor);
+  const cantidadDatos = [
+    tieneMarca,
+    tieneModelo,
+    tieneVersion,
+    tieneAnio,
+    tieneKilometros,
+    respondioAgencia,
+    tieneObservaciones,
+  ].filter(Boolean).length;
+
+  return cantidadDatos >= 3 ? "vendedor" : null;
 }
 
 // Router: clasifica el último mensaje del cliente en 3 categorías.
 // Corre en el modelo barato mirando solo los últimos turnos (texto), así cuesta muy poco.
 // Ante cualquier duda o error, escala al modelo experto (prioriza calidad sobre costo).
 // 'derivar' se usa cuando hace falta una persona, incluyendo la aceptación de un
-// traspaso mediante la entrega completa de los datos que el bot acaba de pedir.
+// traspaso mediante la entrega de datos suficientes para que lo continúe un asesor.
 async function clasificar(messages) {
   const ultimos = (messages || [])
     .slice(-6)
@@ -934,6 +1050,34 @@ export default async function handler(req, res) {
       return res.status(200).json({ paused: true, ultimoId });
     }
 
+    // Barrera comercial previa al router: una unidad fuera del rango aceptado
+    // no se deriva aunque el cliente haya compartido suficientes otros datos.
+    const motivoRechazo = motivoRechazoAutomatico(negocio, messages);
+    if (motivoRechazo) {
+      const texto = botServidor?.rechazoVendedor ||
+        "Gracias por la información. Esta unidad no cumple con los requisitos actuales para compra o consignación.";
+      if (convId && persistenciaActiva()) {
+        try {
+          ultimoId = await agregarMensaje(convId, "assistant", texto);
+        } catch (e) {
+          console.error("db:", e.message);
+        }
+      }
+      await registrarLog({
+        convId,
+        negocio,
+        agente,
+        model: "regla-comercial",
+        userMsg: ultimoMensajeUsuario(messages),
+        botMsg: texto,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        costUsd: 0,
+      });
+      return res.status(200).json({ content: [{ type: "text", text: texto }], ultimoId, motivoRechazo });
+    }
+
     const tools = toolsPara(agente, cineId);
     const ctx = { cineId, ultimoMensajeUsuario: ultimoMensajeUsuario(messages) };
     const convo = podarHistorial(messages);
@@ -950,7 +1094,9 @@ export default async function handler(req, res) {
       // igual que haría el bot real (bot/lib/router.js) ante un "derivar".
       const texto = motivoDerivacion === "financiacion"
         ? botServidor?.derivacionFinanciacion || derivacion || DERIVACION_DEFAULT
-        : derivacion || DERIVACION_DEFAULT;
+        : motivoDerivacion === "vendedor"
+          ? botServidor?.derivacionVendedor || derivacion || DERIVACION_DEFAULT
+          : derivacion || DERIVACION_DEFAULT;
       if (convId && persistenciaActiva()) {
         try {
           await setEstado(convId, "humano");
