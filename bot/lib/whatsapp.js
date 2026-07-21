@@ -2,8 +2,10 @@
 // Responder DENTRO de la ventana de 24hs (mensaje de servicio) no tiene costo.
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-export async function enviarTexto(to, texto) {
-  const url = `${GRAPH}/${process.env.PHONE_NUMBER_ID}/messages`;
+// phoneNumberId: opcional, para mandar desde un canal específico (bandeja
+// unificada). Sin él, usa el único número configurado en PHONE_NUMBER_ID.
+export async function enviarTexto(to, texto, phoneNumberId) {
+  const url = `${GRAPH}/${phoneNumberId || process.env.PHONE_NUMBER_ID}/messages`;
   const r = await fetch(url, {
     method: "POST",
     headers: {

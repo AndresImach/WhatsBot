@@ -61,13 +61,30 @@ la reunión cada cliente ve su propio backoffice, sin mezclarse con los demás.
 - URL por negocio: `https://tu-proyecto.vercel.app/backoffice?n=elfuego`.
 - Sin `?n=`: `https://tu-proyecto.vercel.app/backoffice` muestra un selector
   para elegir el negocio (o "Todas las conversaciones", `?todas=1`, para verlas
-  todas juntas — útil para vos).
+  todas juntas).
 - Necesita: `LOG_TURSO_DATABASE_URL` / `LOG_TURSO_AUTH_TOKEN` (correr
-  `demo/schema.sql` una vez ahí) y `BACKOFFICE_PASSWORD` / `BACKOFFICE_SESSION_SECRET`.
-  La contraseña es una sola, compartida: `?n=` separa la VISTA por negocio, no
-  es un login distinto por cliente.
+  `demo/schema.sql` una vez ahí) y `BACKOFFICE_SESSION_SECRET`.
 - Sin esas env vars, el demo sigue funcionando exactamente igual, solo que sin
   la pausa ni el backoffice (se comporta como antes).
+
+**Login por agente (no hay contraseña única compartida).** Cada persona que
+atiende conversaciones tiene su propio usuario:
+
+```bash
+cd demo
+node scripts/crear-agente.mjs valentina "unaClaveSegura" "Valentina"
+```
+
+El mismo comando sirve para resetear la contraseña de un agente que ya existe.
+Necesita `LOG_TURSO_DATABASE_URL` / `LOG_TURSO_AUTH_TOKEN` en el entorno (o un
+`.env` en `demo/`) — ojo, es la base de LOGS, no la de Tobías.
+
+**Asignación, etiquetas, notas y respuestas rápidas** funcionan igual que en
+`bot/` (ver más abajo), con un matiz: acá el "canal" ya lo da el `negocio`
+(`sunstar`, `elfuego`, `tobias`, etc.), así que en la vista "Todas las
+conversaciones" hay un filtro por negocio en vez de por canal. Las respuestas
+rápidas también se pueden scopear por negocio (una clave `horario` puede tener
+un texto distinto para el cine que para la rotisería) o dejarse globales.
 
 ---
 
@@ -134,15 +151,49 @@ Cuando el clasificador decide `derivar` (queja, reclamo, pedido de hablar con
 una persona, algo delicado), el bot **deja de contestarle a ese número** y la
 conversación queda marcada como `humano` hasta que alguien la resuelve.
 
-`bot/backoffice.html` es la pantalla para eso: entrando con `BACKOFFICE_PASSWORD`
-se ve la lista de conversaciones que necesitan una persona (con el hilo completo
-de mensajes), se puede responder directamente por WhatsApp desde ahí, y con
-"Devolver al bot" la conversación vuelve a ser atendida automáticamente.
+`bot/backoffice.html` es la pantalla para eso: se ve la lista de conversaciones
+que necesitan una persona (con el hilo completo de mensajes), se puede responder
+directamente por WhatsApp desde ahí, y con "Devolver al bot" la conversación
+vuelve a ser atendida automáticamente.
 
 - URL: `https://tu-proyecto.vercel.app/backoffice`
-- Config: `BACKOFFICE_PASSWORD` (la contraseña) y `BACKOFFICE_SESSION_SECRET`
-  (string random para firmar la sesión, ej. `openssl rand -hex 32`).
+- Config: `BACKOFFICE_SESSION_SECRET` (string random para firmar la sesión, ej.
+  `openssl rand -hex 32`). Correr una vez `bot/schema.sql` en la base de Turso.
 - Se actualiza sola cada pocos segundos (polling simple, sin websockets).
+
+**Login por agente (no hay contraseña única compartida).** Cada persona que
+atiende conversaciones tiene su propio usuario:
+
+```bash
+cd bot
+node scripts/crear-agente.mjs valentina "unaClaveSegura" "Valentina"
+```
+
+El mismo comando sirve para resetear la contraseña de un agente que ya existe.
+Necesita `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` en el entorno (o un `.env`
+en `bot/`, por ejemplo bajado con `vercel env pull`).
+
+**Asignación.** Cada conversación puede quedar tomada por un agente (se asigna
+sola al primero que contesta, o se puede tomar/reasignar a mano desde el
+selector del panel). Tabs rápidos en la lista: *Esperan persona*, *Mías*,
+*Sin asignar*, *Todas* — combinables con un filtro de canal y de etiqueta.
+
+**Etiquetas y notas privadas.** Cada conversación se puede taguear (queja, vip,
+lo que quieras) desde el panel. Las notas (pestaña "📝 Notas" del panel) son
+para dejar contexto entre agentes — nunca se mandan por WhatsApp ni las ve el
+modelo.
+
+**Respuestas rápidas.** El botón ⚡ del compositor abre las respuestas
+guardadas (clave + texto) y las gestionás ahí mismo ("⚙️ Gestionar respuestas
+rápidas"); útil para lo que se contesta seguido (horarios, forma de pago, etc.).
+
+**Bandeja unificada (multi-canal), opcional.** Si el negocio tiene más de un
+número de WhatsApp mandando al mismo webhook (ej. dos locales bajo la misma
+WABA), completá `CANALES` en `bot/lib/config.js` con el nombre de cada Phone
+Number ID. El backoffice detecta el canal de cada mensaje automáticamente, lo
+muestra como filtro, y contesta siempre por el número correcto — no hace falta
+nada más si todos los números comparten el mismo `WHATSAPP_TOKEN` (caso típico
+cuando están bajo la misma cuenta de negocio de Meta).
 
 ---
 
