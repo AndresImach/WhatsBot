@@ -257,6 +257,72 @@ test("financiación deriva realmente al recibir nombre completo y DNI", async ()
   }
 });
 
+test("visita deriva con un ok después de ofrecer coordinación", () => {
+  const messages = [
+    { role: "user", content: "Quiero ver el Audi Q3" },
+    {
+      role: "assistant",
+      content: "Tenemos disponible el Audi Q3. Si estás interesado, puedo coordinar una visita para verlo. 😊",
+    },
+    { role: "user", content: "ok" },
+  ];
+
+  assert.equal(motivoDerivacionAutomatica("usadosnuevos", messages), "visita");
+});
+
+test("visita deriva al responder el nombre sin pedir más intención", () => {
+  const messages = [
+    { role: "user", content: "ok" },
+    {
+      role: "assistant",
+      content: "Para coordinar la visita, necesito tu nombre y un día/hora que te quede cómodo.",
+    },
+    { role: "user", content: "manuel" },
+  ];
+
+  assert.equal(motivoDerivacionAutomatica("usadosnuevos", messages), "visita");
+});
+
+test("visita aceptada recibe traspaso sin llamar al LLM", async () => {
+  const fetchOriginal = global.fetch;
+  const databaseUrlOriginal = process.env.LOG_TURSO_DATABASE_URL;
+  delete process.env.LOG_TURSO_DATABASE_URL;
+  global.fetch = async () => assert.fail("La aceptación de una visita no debe llamar al LLM");
+
+  try {
+    let statusCode = 0;
+    let payload;
+    const req = {
+      method: "POST",
+      body: {
+        messages: [
+          { role: "user", content: "Quiero ver el Audi Q3" },
+          { role: "assistant", content: "Si estás interesado, puedo coordinar una visita para verlo. 😊" },
+          { role: "user", content: "ok" },
+        ],
+        negocio: "usadosnuevos",
+      },
+    };
+    const res = {
+      status(code) { statusCode = code; return this; },
+      json(data) { payload = data; return data; },
+    };
+
+    await handler(req, res);
+
+    assert.equal(statusCode, 200);
+    assert.equal(payload.derivar, true);
+    assert.equal(
+      payload.content[0].text,
+      "Perfecto. Te paso con un vendedor para coordinar la visita y confirmar la disponibilidad de la unidad 🙌"
+    );
+  } finally {
+    global.fetch = fetchOriginal;
+    if (databaseUrlOriginal === undefined) delete process.env.LOG_TURSO_DATABASE_URL;
+    else process.env.LOG_TURSO_DATABASE_URL = databaseUrlOriginal;
+  }
+});
+
 test("cliente vendedor deriva al completar los siete datos requeridos", () => {
   const messages = [
     { role: "user", content: "Quiero vender mi auto" },

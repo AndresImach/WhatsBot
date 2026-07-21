@@ -846,6 +846,27 @@ export function motivoDerivacionAutomatica(negocio, messages) {
     if (tieneDni && palabrasNombre.length >= 2) return "financiacion";
   }
 
+  let mensajeBotAnterior = "";
+  for (let i = indiceUsuario - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant" && typeof messages[i].content === "string") {
+      mensajeBotAnterior = messages[i].content;
+      break;
+    }
+  }
+  const respuestaActual = messages[indiceUsuario].content.trim();
+  const ofrecioCoordinarVisita =
+    /(coordinar|agendar) (?:una )?visita|visita para (?:verlo|verla)|venir a ver|visita al showroom/i.test(mensajeBotAnterior);
+  const aceptoVisita =
+    /^(?:ok(?:ay)?|dale|s[ií]|bueno|perfecto|de acuerdo|listo|vamos|coordinemos)(?:[\s,!.].*)?$/i.test(respuestaActual) ||
+    /^(?:me interesa|quiero coordinar|quiero ir|quiero verlo|quiero verla)/i.test(respuestaActual);
+  if (ofrecioCoordinarVisita && aceptoVisita) return "visita";
+
+  const pidioDatosParaVisita =
+    /(para coordinar|coordinar la visita|agendar la visita)/i.test(mensajeBotAnterior) &&
+    /\bnombre\b/i.test(mensajeBotAnterior);
+  const rechazoVisita = /^(?:no|no gracias|todav[ií]a no|m[aá]s tarde|despu[eé]s)[.!\s]*$/i.test(respuestaActual);
+  if (pidioDatosParaVisita && respuestaActual && !rechazoVisita) return "visita";
+
   const contextoVendedor = contextoClienteVendedor(messages, indiceUsuario);
   if (!contextoVendedor || motivoRechazoAutomatico(negocio, messages)) return null;
   const respuestaVendedor = contextoVendedor.texto;
@@ -1094,6 +1115,8 @@ export default async function handler(req, res) {
       // igual que haría el bot real (bot/lib/router.js) ante un "derivar".
       const texto = motivoDerivacion === "financiacion"
         ? botServidor?.derivacionFinanciacion || derivacion || DERIVACION_DEFAULT
+        : motivoDerivacion === "visita"
+          ? botServidor?.derivacionVisita || derivacion || DERIVACION_DEFAULT
         : motivoDerivacion === "vendedor"
           ? botServidor?.derivacionVendedor || derivacion || DERIVACION_DEFAULT
           : derivacion || DERIVACION_DEFAULT;

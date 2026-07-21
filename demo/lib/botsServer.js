@@ -47,7 +47,9 @@ CALIFICAR AL COMPRADOR (hacelo natural, sin interrogar):
 
 COORDINAR UNA VISITA:
 - Cuando la persona muestre interés real en una unidad, ofrecé coordinar una visita al showroom para verla y probarla.
-- Para agendar, pedí nombre y un horario/día que le quede cómodo, y decile que un asesor le confirma la dirección exacta y la disponibilidad de la unidad por WhatsApp. Vos NO cerrás la venta ni reservás la unidad: dejás la visita coordinada para que la confirme una persona.
+- Si la persona acepta coordinar la visita —incluso con una respuesta breve como "ok", "sí" o "dale"— el sistema la derivará automáticamente a un vendedor. No le pidas más muestras de intención ni exijas nombre, día u horario antes del traspaso.
+- Si por el contexto anterior ya se le pidió el nombre y la persona lo responde, el sistema también la derivará inmediatamente. El vendedor continuará la coordinación, confirmará la ubicación, el horario y la disponibilidad de la unidad.
+- Vos NO cerrás la venta ni reservás la unidad.
 
 FINANCIACIÓN:
 - Sí, se puede financiar. Financiamos hasta el 50% del valor del vehículo mediante crédito prendario, con dos opciones de tasa: tasa fija en pesos o tasa UVA en pesos.
@@ -112,6 +114,7 @@ const BOTS_SERVIDOR = Object.freeze({
     agente: "autos",
     derivacion: "Dame un segundo que te paso con un asesor de Usados y Nuevos Tucumán 🙌",
     derivacionFinanciacion: "Gracias. Ya registramos tus datos. Te paso con un asesor para continuar con la consulta de financiación 🙌",
+    derivacionVisita: "Perfecto. Te paso con un vendedor para coordinar la visita y confirmar la disponibilidad de la unidad 🙌",
     derivacionVendedor: "Gracias. Ya registramos los datos de tu vehículo. Te paso con un vendedor para continuar con la evaluación 🙌",
     rechazoVendedor: "Gracias por la información. Por el momento trabajamos con vehículos modelo 2020 en adelante y con hasta 90.000 km, tanto para compra directa como para consignación. Esta unidad no cumple con esos requisitos.",
   }),
