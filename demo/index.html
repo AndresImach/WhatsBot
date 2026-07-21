@@ -432,7 +432,8 @@
           .then(d => NEGOCIO.promptBase.replace('{{CATALOGO}}', d.texto || 'CATÁLOGO: no disponible en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'))
           .catch(() => NEGOCIO.promptBase.replace('{{CATALOGO}}', 'CATÁLOGO: no se pudo cargar en este momento. Si te preguntan por productos o precios, pedí disculpas y ofrecé derivar la consulta a una persona del local.'));
       } else {
-        _systemPromise = Promise.resolve(NEGOCIO.prompt);
+        // Los bots con configuración server-side no exponen su prompt al navegador.
+        _systemPromise = Promise.resolve(NEGOCIO.configuracionServidor ? null : NEGOCIO.prompt);
       }
       return _systemPromise;
     }
@@ -474,16 +475,19 @@
     async function responder() {
       typing(true);
       try {
+        const configuracionCliente = NEGOCIO.configuracionServidor ? {} : {
+          system: await getSystem(),
+          agente: NEGOCIO.agente,
+          cineId: NEGOCIO.cineId,
+          derivacion: NEGOCIO.derivacion
+        };
         const r = await fetch("/api/chat", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            system: await getSystem(),
             messages: history,
-            agente: NEGOCIO.agente, // 'cine' | 'tobias' | undefined → habilita herramientas en el server
-            cineId: NEGOCIO.cineId,
             convId: CONV_ID,
             negocio: NEGOCIO_SLUG,
-            derivacion: NEGOCIO.derivacion
+            ...configuracionCliente
           })
         });
         const data = await r.json();

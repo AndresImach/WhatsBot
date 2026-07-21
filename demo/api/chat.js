@@ -1,7 +1,8 @@
-// Proxy serverless: recibe {system, messages, agente, cineId} del navegador y llama al LLM
-// vía OpenRouter (openrouter.ai) — un solo endpoint OpenAI-compatible con acceso a Anthropic,
-// OpenAI, Google y otros proveedores. La API key NUNCA sale al cliente: vive en la variable
-// de entorno OPENROUTER_API_KEY.
+// Proxy serverless: recibe {negocio, messages} del navegador y llama al LLM vía OpenRouter
+// (openrouter.ai). Los bots migrados a lib/botsServer.js resuelven acá su system prompt,
+// herramientas y derivación; no se confía en esos campos si el cliente intenta enviarlos.
+// Las demos todavía no migradas conservan temporalmente el formato anterior. La API key
+// NUNCA sale al cliente: vive en la variable de entorno OPENROUTER_API_KEY.
 //
 // Por qué OpenRouter y no pegarle directo a Anthropic: para poder cambiar de modelo/proveedor
 // (por costo, por cliente) cambiando MODEL_BARATO/MODEL_EXPERTO/MODEL_ROUTER (env vars, más
@@ -51,6 +52,7 @@
 //     LOG_TURSO_DATABASE_URL, LOG_TURSO_AUTH_TOKEN
 import { upsertConversacion, getConversacion, setEstado, agregarMensaje } from "../lib/db.js";
 import { buscarVehiculos } from "../lib/autosStock.js";
+import { obtenerBotServidor } from "../lib/botsServer.js";
 import { normalizarContenidoWhatsApp } from "../lib/whatsappSalida.js";
 
 const CINE_API = "https://apiv2.gaf.adro.studio";
@@ -848,9 +850,25 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
   try {
-    const { system, messages, agente, cineId, convId, negocio, derivacion } = req.body || {};
+    const {
+      system: systemCliente,
+      messages,
+      agente: agenteCliente,
+      cineId: cineIdCliente,
+      convId,
+      negocio,
+      derivacion: derivacionCliente,
+    } = req.body || {};
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "messages es requerido" });
+    }
+    const botServidor = obtenerBotServidor(negocio);
+    const system = botServidor ? botServidor.system : systemCliente;
+    const agente = botServidor ? botServidor.agente : agenteCliente;
+    const cineId = botServidor ? botServidor.cineId : cineIdCliente;
+    const derivacion = botServidor ? botServidor.derivacion : derivacionCliente;
+    if (!system) {
+      return res.status(400).json({ error: "No hay una configuración válida para este negocio" });
     }
 
     // Persistencia + pivot a humano: guardamos el mensaje del cliente y nos
