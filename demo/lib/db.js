@@ -30,7 +30,7 @@ async function turso(sql, args = []) {
   return rr.rows.map((row) => Object.fromEntries(row.map((c, i) => [rr.cols[i].name, _decode(c)])));
 }
 
-const COLUMNAS_CONVERSACION = 'convId, negocio, estado, asignadoA, asignadoNombre, etiquetas, updatedAt';
+const COLUMNAS_CONVERSACION = 'convId, negocio, estado, asignadoA, asignadoNombre, etiquetas, valoracion, updatedAt';
 
 export async function upsertConversacion(convId, negocio) {
   await turso(
@@ -99,6 +99,11 @@ export async function setEtiquetas(convId, etiquetas) {
   const limpio = (etiquetas || []).map((t) => String(t).trim()).filter(Boolean);
   await turso('UPDATE "DemoConversacion" SET etiquetas = ?, updatedAt = datetime(\'now\') WHERE convId = ?', [limpio.join(","), convId]);
   return limpio;
+}
+
+// ── Valoración (👍/👎 del agente sobre si el bot resolvió bien la conversación) ──
+export async function setValoracion(convId, valoracion) {
+  await turso('UPDATE "DemoConversacion" SET valoracion = ?, updatedAt = datetime(\'now\') WHERE convId = ?', [valoracion || null, convId]);
 }
 
 // ── Notas privadas (nunca las ve el widget del cliente) ─────────────────────

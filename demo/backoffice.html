@@ -75,6 +75,8 @@
     .badge.bot { background: #14361f; color: #7fdca4 }
     .badge.negocio { background: #1c2b33; color: #7fc8dc }
     .badge.asignado { background: #241c3a; color: #b39ef0 }
+    .badge.valPos { background: #14361f; color: #7fdca4 }
+    .badge.valNeg { background: #3a1420; color: #f2708f }
     .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: .66rem; background: #2a3942; color: #d5dde1 }
     .chip button { background: none; border: none; color: inherit; cursor: pointer; font-size: .8rem; line-height: 1; padding: 0 }
     .vacio { color: #8aa0ad; text-align: center; padding: 30px 16px; font-size: .85rem }
@@ -87,6 +89,10 @@
     .panel header .acciones { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
     .panel header select { background: #1f2c34; border: 1px solid #2a3942; color: #e9edef; padding: 6px 8px; border-radius: 8px; font-size: .78rem }
     .panel header button.resolver { background: #1f2c34; border: 1px solid #2a3942; color: #e9edef; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: .8rem }
+    .panel header button.thumb { background: #1f2c34; border: 1px solid #2a3942; color: #e9edef; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: .95rem; opacity: .55 }
+    .panel header button.thumb:hover { opacity: .85 }
+    .panel header button.thumb.activo.pos { background: #14361f; border-color: #1FA855; opacity: 1 }
+    .panel header button.thumb.activo.neg { background: #3a1420; border-color: #f2708f; opacity: 1 }
     .etiquetasFila { padding: 8px 18px; border-bottom: 1px solid #2a3942; display: flex; gap: 6px; flex-wrap: wrap; align-items: center }
     .etiquetasFila input { background: #1f2c34; border: 1px solid #2a3942; color: #e9edef; padding: 4px 8px; border-radius: 10px; font-size: .72rem; width: 110px }
 
@@ -384,6 +390,7 @@
           <div class="fila1">
             <span class="nm">${NEGOCIO_SLUG ? ('Conversación ' + corto(c.convId)) : esc(nombreNegocio(c.negocio))}</span>
             <span class="badge ${c.estado === 'humano' ? 'humano' : 'bot'}">${c.estado === 'humano' ? '🙋 Persona' : '🤖 Bot'}</span>
+            ${c.valoracion === 'positiva' ? '<span class="badge valPos">👍</span>' : c.valoracion === 'negativa' ? '<span class="badge valNeg">👎</span>' : ''}
           </div>
           <span class="num">${corto(c.convId)}… · ${hora(c.updatedAt)}</span>
           <div class="fila3">
@@ -440,6 +447,8 @@
               <option value="">Sin asignar</option>
               ${opcionesAgentes}
             </select>
+            <button class="thumb pos" id="btnPos" onclick="valorar('${convId}','positiva')" title="El bot resolvió bien esta conversación">👍</button>
+            <button class="thumb neg" id="btnNeg" onclick="valorar('${convId}','negativa')" title="El bot resolvió mal esta conversación">👎</button>
             <button class="resolver" id="btnResolver" onclick="resolver()" style="display:none">✓ Devolver al bot</button>
           </div>
         </header>
@@ -495,6 +504,13 @@
         (!NEGOCIO_SLUG && conv.negocio ? `<span class="badge negocio">${esc(nombreNegocio(conv.negocio))}</span>` : '');
       btnResolver.style.display = conv.estado === 'humano' ? 'inline-block' : 'none';
       if (document.activeElement !== selAsignado) selAsignado.value = conv.asignadoA || '';
+
+      const btnPos = document.getElementById('btnPos');
+      const btnNeg = document.getElementById('btnNeg');
+      if (btnPos && btnNeg) {
+        btnPos.classList.toggle('activo', conv.valoracion === 'positiva');
+        btnNeg.classList.toggle('activo', conv.valoracion === 'negativa');
+      }
 
       const chips = etiquetasDe(conv).map((t) => `<span class="chip">${esc(t)} <button onclick="quitarEtiqueta('${esc(conv.convId)}','${esc(t)}')">×</button></span>`).join('');
       etiquetasFila.innerHTML = chips + `<input list="etiquetasConocidas" placeholder="+ etiqueta" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarEtiqueta('${esc(conv.convId)}', this.value); this.value='';}">`;
@@ -596,6 +612,21 @@
         await cargarLista();
       } catch (e) {
         alert('No se pudo actualizar: ' + e.message);
+      }
+    }
+
+    // Clic de nuevo sobre el mismo botón quita la valoración (toggle).
+    async function valorar(convId, valor) {
+      if (!convId) return;
+      try {
+        const todas = await api('/api/backoffice/conversaciones' + qsConversaciones({}));
+        const conv = (todas.conversaciones || []).find((c) => c.convId === convId);
+        const nuevo = conv && conv.valoracion === valor ? null : valor;
+        await api('/api/backoffice/valoracion', { method: 'POST', body: JSON.stringify({ convId, valoracion: nuevo }) });
+        await cargarLista();
+        await actualizarHilo(convId, true);
+      } catch (e) {
+        alert('No se pudo guardar la valoración: ' + e.message);
       }
     }
 

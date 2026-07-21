@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS "DemoConversacion" (
   asignadoA      INTEGER,           -- Agente.id que la tiene tomada (NULL = sin asignar)
   asignadoNombre TEXT,              -- denormalizado, como en bot/schema.sql
   etiquetas      TEXT,              -- "queja,vip" (comma-separated, sin espacios)
+  valoracion     TEXT,              -- 'positiva' | 'negativa' | NULL: 👍/👎 del agente sobre si el bot resolvió bien la conversación
   updatedAt      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -65,3 +66,4 @@ CREATE TABLE IF NOT EXISTS "DemoAtajo" (
 -- ALTER TABLE "DemoConversacion" ADD COLUMN asignadoA INTEGER;
 -- ALTER TABLE "DemoConversacion" ADD COLUMN asignadoNombre TEXT;
 -- ALTER TABLE "DemoConversacion" ADD COLUMN etiquetas TEXT;
+-- ALTER TABLE "DemoConversacion" ADD COLUMN valoracion TEXT;

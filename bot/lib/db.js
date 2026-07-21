@@ -29,7 +29,7 @@ async function turso(sql, args = []) {
   return rr.rows.map((row) => Object.fromEntries(row.map((c, i) => [rr.cols[i].name, _decode(c)])));
 }
 
-const COLUMNAS_CONVERSACION = 'numero, nombre, estado, canal, canalNombre, asignadoA, asignadoNombre, etiquetas, updatedAt';
+const COLUMNAS_CONVERSACION = 'numero, nombre, estado, canal, canalNombre, asignadoA, asignadoNombre, etiquetas, valoracion, updatedAt';
 
 // Crea la conversación si no existe (queda en estado 'bot'); si ya existe, solo
 // actualiza el nombre de contacto/canal (si vinieron) y el updatedAt.
@@ -105,6 +105,11 @@ export async function setEtiquetas(numero, etiquetas) {
   const limpio = (etiquetas || []).map((t) => String(t).trim()).filter(Boolean);
   await turso('UPDATE "Conversacion" SET etiquetas = ?, updatedAt = datetime(\'now\') WHERE numero = ?', [limpio.join(","), numero]);
   return limpio;
+}
+
+// ── Valoración (👍/👎 del agente sobre si el bot resolvió bien la conversación) ──
+export async function setValoracion(numero, valoracion) {
+  await turso('UPDATE "Conversacion" SET valoracion = ?, updatedAt = datetime(\'now\') WHERE numero = ?', [valoracion || null, numero]);
 }
 
 // ── Notas privadas (nunca se mandan por WhatsApp ni entran a historialParaModelo) ──
