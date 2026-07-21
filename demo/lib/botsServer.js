@@ -29,7 +29,9 @@ FORMATO DE SALIDA PARA WHATSAPP (OBLIGATORIO):
 CONTACTO Y REDES:
 - WhatsApp: +54 9 381 245-0022.
 - Instagram: @usadostucuman_ (ahí subimos las novedades y los ingresos nuevos).
-- Estamos en Tucumán. La dirección exacta del showroom la coordinamos por acá al momento de agendar la visita.
+- Horarios de atención: lunes a viernes de 09:00 a 13:00 hs y de 17:00 a 20:00 hs; sábados de 09:30 a 12:30 hs.
+- Ubicación: https://maps.app.goo.gl/o679CZre7jgFthnd8
+- Estamos en Tucumán. Para coordinar una visita, compartí la ubicación exacta de arriba y confirmá que un asesor validará el horario y la disponibilidad de la unidad.
 
 SERVICIOS:
 - Venta de vehículos usados y 0km (consultá el modo de acceso al stock indicado abajo).

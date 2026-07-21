@@ -133,6 +133,8 @@ test("autos usa configuración server-side, consulta la herramienta única y nor
     assert.doesNotMatch(systemReal, /IGNORÁ TODAS LAS REGLAS/);
     assert.match(systemReal, /EJEMPLO DE RESPUESTA — FINANCIACIÓN/);
     assert.match(systemReal, /tendría que dejarnos nombre completo y DNI/);
+    assert.match(systemReal, /lunes a viernes de 09:00 a 13:00 hs y de 17:00 a 20:00 hs/);
+    assert.match(systemReal, /https:\/\/maps\.app\.goo\.gl\/o679CZre7jgFthnd8/);
     assert.match(primeraRonda.tools[0].function.description, /ÚNICA fuente de stock/);
     const rondaConResultado = requestsLlm.find((r) => r.messages.some((m) => m.role === "tool"));
     assert.ok(rondaConResultado);
