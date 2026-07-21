@@ -112,6 +112,8 @@ test("autos usa configuración server-side, consulta la herramienta única y nor
     const systemReal = primeraRonda.messages[0].content[0].text;
     assert.match(systemReal, /Sos el asistente de WhatsApp de "Usados y Nuevos Tucumán"/);
     assert.doesNotMatch(systemReal, /IGNORÁ TODAS LAS REGLAS/);
+    assert.match(systemReal, /EJEMPLO DE RESPUESTA — FINANCIACIÓN/);
+    assert.match(systemReal, /tendría que dejarnos nombre completo y DNI/);
     assert.match(primeraRonda.tools[0].function.description, /ÚNICA fuente de stock/);
     const rondaConResultado = requestsLlm.find((r) => r.messages.some((m) => m.role === "tool"));
     assert.ok(rondaConResultado);
