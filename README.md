@@ -86,16 +86,20 @@ conversaciones" hay un filtro por negocio en vez de por canal. Las respuestas
 rápidas también se pueden scopear por negocio (una clave `horario` puede tener
 un texto distinto para el cine que para la rotisería) o dejarse globales.
 
-### CRM de concesionaria (maqueta para la reunión)
+### CRM de concesionaria
 
-`demo/crm.html` es un backoffice CRM completo y navegable para la agencia de
-autos ("Usados y Nuevos Tucumán"): panel con KPIs, chats con etiquetas/notas/
-respuestas rápidas, inventario de vehículos, kanban de leads, turnos de test
-drive, tomas de usado y gestión del equipo. Todo funciona (altas, bajas,
-filtros, kanban) pero **los datos son de demo y viven en memoria** — es la
-maqueta que le mostrás al cliente para venderle el paso siguiente, no está
-conectado a la base. URL: `https://tu-proyecto.vercel.app/crm`. Cero
-dependencias, se deploya solo con la carpeta.
+`demo/crm.html` es el backoffice CRM de la agencia de autos ("Usados y
+Nuevos Tucumán"). La pestaña **Chats es real**: usa el mismo backend y el
+mismo login por agente que `demo/backoffice.html` (conversaciones, responder,
+devolver al bot, asignación, etiquetas, notas, valoración y respuestas
+rápidas), scopeada al negocio `usadosnuevos` (`?n=<clave>` para apuntarla a
+otro). **Equipo** también es real: lista los agentes y gestiona las
+respuestas rápidas contra la API. Las demás pestañas (inventario, kanban de
+leads, turnos, tomas de usado) siguen siendo maqueta con datos en memoria
+— están marcadas "Datos de ejemplo" — hasta que exista backend para eso.
+URL: `https://tu-proyecto.vercel.app/crm`. Necesita las mismas env vars que
+el backoffice (`LOG_TURSO_*`, `BACKOFFICE_SESSION_SECRET`) y agentes creados
+con `scripts/crear-agente.mjs`. Cero dependencias.
 
 ---
 
