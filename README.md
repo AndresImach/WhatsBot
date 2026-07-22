@@ -86,6 +86,17 @@ conversaciones" hay un filtro por negocio en vez de por canal. Las respuestas
 rápidas también se pueden scopear por negocio (una clave `horario` puede tener
 un texto distinto para el cine que para la rotisería) o dejarse globales.
 
+### CRM de concesionaria (maqueta para la reunión)
+
+`demo/crm.html` es un backoffice CRM completo y navegable para la agencia de
+autos ("Usados y Nuevos Tucumán"): panel con KPIs, chats con etiquetas/notas/
+respuestas rápidas, inventario de vehículos, kanban de leads, turnos de test
+drive, tomas de usado y gestión del equipo. Todo funciona (altas, bajas,
+filtros, kanban) pero **los datos son de demo y viven en memoria** — es la
+maqueta que le mostrás al cliente para venderle el paso siguiente, no está
+conectado a la base. URL: `https://tu-proyecto.vercel.app/crm`. Cero
+dependencias, se deploya solo con la carpeta.
+
 ---
 
 ## 3. bot/ — el chatbot que vendés
