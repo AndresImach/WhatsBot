@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>WhatsBot CRM</title>
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="login" class="login-shell" hidden>
+    <form id="loginForm" class="login-card">
+      <div class="brand-mark">W</div>
+      <p class="eyebrow">WhatsBot</p>
+      <h1>Ingresá al CRM</h1>
+      <p class="muted">Conversaciones de todos tus negocios, en un solo lugar.</p>
+      <label>Usuario<input id="loginUsuario" autocomplete="username" required></label>
+      <label>Contraseña<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <p id="loginError" class="error" role="alert"></p>
+      <button class="primary wide" type="submit">Ingresar</button>
+    </form>
+  </div>
+
+  <div id="app" class="app-shell" hidden>
+    <header class="topbar">
+      <button class="brand" data-action="inbox" aria-label="Abrir bandeja">
+        <span class="brand-mark small">W</span>
+        <span><strong>WhatsBot</strong><small>CRM multi-cliente</small></span>
+      </button>
+      <nav class="main-nav" aria-label="Secciones">
+        <button id="navInbox" class="nav-btn active" data-action="inbox">Bandeja</button>
+        <button id="navAdmin" class="nav-btn" data-action="admin" hidden>Administración</button>
+      </nav>
+      <div class="top-actions">
+        <label class="business-picker">
+          <span>Negocio</span>
+          <select id="negocioSelect" aria-label="Filtrar por negocio"></select>
+        </label>
+        <div class="user-chip">
+          <span id="userAvatar" class="avatar"></span>
+          <span><strong id="userName"></strong><small id="userRole"></small></span>
+        </div>
+        <button class="icon-btn" data-action="logout" title="Cerrar sesión">Salir</button>
+      </div>
+    </header>
+
+    <main id="inboxView" class="inbox-layout">
+      <aside class="conversation-sidebar">
+        <div class="sidebar-head">
+          <div>
+            <p class="eyebrow">Atención</p>
+            <h2>Conversaciones</h2>
+          </div>
+          <span id="conversationCount" class="count">0</span>
+        </div>
+        <div class="queue-tabs" role="tablist">
+          <button class="queue active" data-queue="esperan">Esperan persona</button>
+          <button class="queue" data-queue="mias">Mías</button>
+          <button class="queue" data-queue="sin_asignar">Sin asignar</button>
+          <button class="queue" data-queue="todas">Todas</button>
+        </div>
+        <div class="filters">
+          <select id="canalFilter" aria-label="Filtrar por canal"><option value="">Todos los canales</option></select>
+          <input id="tagFilter" placeholder="Filtrar por etiqueta…" aria-label="Filtrar por etiqueta">
+        </div>
+        <div id="conversationList" class="conversation-list"></div>
+      </aside>
+
+      <section id="emptyDetail" class="empty-detail">
+        <div class="empty-icon">↗</div>
+        <h2>Elegí una conversación</h2>
+        <p>Vas a ver el historial, la asignación y las herramientas del negocio.</p>
+      </section>
+
+      <section id="conversationDetail" class="conversation-detail" hidden>
+        <div class="detail-head">
+          <button class="mobile-back" data-action="close-detail" aria-label="Volver a la lista">‹</button>
+          <div>
+            <div class="detail-title">
+              <h2 id="contactName"></h2>
+              <span id="conversationState" class="status"></span>
+            </div>
+            <p id="contactMeta" class="muted"></p>
+          </div>
+          <div class="detail-actions">
+            <select id="assignmentSelect" aria-label="Asignar conversación"></select>
+            <button id="resolveButton" class="secondary" data-action="resolve">Devolver al bot</button>
+          </div>
+        </div>
+        <div id="tagRow" class="tag-row"></div>
+        <div class="detail-tabs" role="tablist">
+          <button class="detail-tab active" data-detail-tab="chat">Chat</button>
+          <button id="notesTab" class="detail-tab" data-detail-tab="notes">Notas</button>
+          <div class="rating" aria-label="Valorar respuesta del bot">
+            <button id="ratingUp" data-rating="positiva" title="El bot resolvió bien">👍</button>
+            <button id="ratingDown" data-rating="negativa" title="El bot resolvió mal">👎</button>
+          </div>
+        </div>
+        <div id="messages" class="messages"></div>
+        <div id="notes" class="notes" hidden></div>
+        <div id="composer" class="composer">
+          <button id="shortcutButton" class="shortcut-btn" data-action="toggle-shortcuts" title="Respuestas rápidas">⚡</button>
+          <div id="shortcutPopover" class="shortcut-popover" hidden></div>
+          <textarea id="replyText" rows="2" placeholder="Escribí una respuesta…" aria-label="Respuesta"></textarea>
+          <button class="primary" data-action="send">Enviar</button>
+        </div>
+        <form id="noteForm" class="note-form" hidden>
+          <textarea id="noteText" rows="2" placeholder="Nota interna; el cliente no la ve…" required></textarea>
+          <button class="primary" type="submit">Guardar nota</button>
+        </form>
+      </section>
+    </main>
+
+    <main id="adminView" class="admin-view" hidden>
+      <div class="admin-head">
+        <div>
+          <p class="eyebrow">Configuración</p>
+          <h1>Administración</h1>
+          <p class="muted">Negocios, equipo, canales, credenciales y funciones del CRM.</p>
+        </div>
+        <button class="secondary" data-action="refresh-admin">Actualizar</button>
+      </div>
+      <div id="adminContent" class="admin-grid"></div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

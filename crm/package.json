@@ -1,0 +1,17 @@
+{
+  "name": "whatsbot-crm",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "CRM multi-cliente para los bots de WhatsApp",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "migrate": "node scripts/migrar-schema.mjs",
+    "bootstrap": "node scripts/bootstrap-superadmin.mjs",
+    "backup": "node scripts/backup-logico.mjs",
+    "migrate:legacy": "node scripts/migrar-negocio.mjs"
+  },
+  "dependencies": {
+    "@libsql/client": "0.17.4"
+  }
+}

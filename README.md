@@ -1,15 +1,18 @@
 # WhatsBot
 
-Todo lo necesario para salir a vender chatbots de WhatsApp. Cuatro cosas separadas:
+Todo lo necesario para salir a vender chatbots de WhatsApp. Cinco cosas separadas:
 
 ```
 landing/   → tu página de venta (la mandás a los clientes)
 demo/      → la demo con LLM que mostrás en la reunión
 bot/       → el chatbot real que le instalás al cliente que compra
+crm/       → el CRM unificado para atender todos los negocios
 pedidos/   → PWA de mostrador: el carnicero confirma a mano los pedidos que tomó el bot
 ```
 
-Cada carpeta se deploya sola a Vercel (proyectos separados). No dependen entre sí.
+Cada carpeta se deploya sola a Vercel (proyectos separados). Los bots hablan
+con `crm/` por una API key propia del negocio; nunca reciben acceso directo a
+la base central.
 
 ---
 
@@ -103,7 +106,48 @@ con `scripts/crear-agente.mjs`. Cero dependencias.
 
 ---
 
-## 3. bot/ — el chatbot que vendés
+## 3. crm/ — CRM unificado multi-cliente
+
+Un único backoffice para todos los clientes. Tiene aislamiento por negocio,
+usuarios asignables a uno o varios negocios, roles por negocio, canales de
+WhatsApp, bandeja unificada, notas, etiquetas, valoración, atajos y un panel
+superadmin para provisionar negocios y rotar API keys.
+
+Las tablas viven en la base central `whatsbot-demo-logs`, pero no reemplazan ni
+mezclan las tablas `Demo*`: ambos sistemas pueden convivir.
+
+Deploy de producción: <https://whatsbot-crm.vercel.app>
+
+### Preparación local
+
+```bash
+cd crm
+npm install
+cp .env.example .env.local
+npm run migrate
+npm run bootstrap -- admin "una-clave-de-al-menos-10-caracteres" "Administrador"
+npx --yes vercel@latest dev --local --listen 3001
+```
+
+Variables obligatorias:
+
+- `CRM_TURSO_DATABASE_URL` / `CRM_TURSO_AUTH_TOKEN`
+- `CRM_SESSION_SECRET`
+- `CRM_CRYPTO_KEY` (32 bytes en base64)
+- `META_GRAPH_VERSION`, tomada de la configuración vigente de la app Meta
+
+El superadmin crea un negocio, registra su Phone Number ID + token permanente y
+genera una `wbk_...` que se muestra una sola vez. Esa key y la URL del CRM se
+cargan en el deploy del bot.
+
+Los scripts operativos son:
+
+- `npm run backup`: backup lógico en un archivo temporal con permisos privados.
+- `npm run migrate:legacy -- --negocio <clave>`: dry-run de una base single-tenant.
+- El mismo comando con `--apply`: aplica una importación idempotente y puede
+  repetirse después del cambio de deployment para cerrar el delta.
+
+## 4. bot/ — el chatbot que vendés
 
 El sistema real: un webhook conectado al **WhatsApp oficial de Meta** (Cloud API).
 Recibe los mensajes de verdad y responde solo.
@@ -119,6 +163,7 @@ Recibe los mensajes de verdad y responde solo.
 - `lib/config.js` — **lo único que cambiás por cliente**: nombre, prompt del negocio,
   mensajes de "fuera de tema" y "derivación".
 - `lib/whatsapp.js` — manda la respuesta por la Graph API.
+- `lib/crm.js` — registra mensajes y consulta el estado humano por HTTP.
 
 ### Deploy y conexión con Meta
 
@@ -126,7 +171,7 @@ Recibe los mensajes de verdad y responde solo.
 1. Importás la carpeta `bot/` en Vercel.
 2. Cargás las Environment Variables (ver `.env.example`):
    `ANTHROPIC_API_KEY`, `WHATSAPP_TOKEN`, `PHONE_NUMBER_ID`, `VERIFY_TOKEN`,
-   `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `BACKOFFICE_PASSWORD`, `BACKOFFICE_SESSION_SECRET`.
+   `META_GRAPH_VERSION`, `CRM_API_URL` y `CRM_API_KEY`.
    El `VERIFY_TOKEN` es una palabra secreta que inventás vos.
 3. Deploy. Tu webhook queda en `https://tu-proyecto.vercel.app/api/webhook`.
 
@@ -148,71 +193,21 @@ Recibe los mensajes de verdad y responde solo.
 > cliente (mensaje de servicio) no tiene costo por conversación. Lo que se paga
 > es el uso de la API de Claude por mensaje.
 
-### Historial de conversación
+### Historial y atención humana
 
-El historial y el estado de cada conversación viven en una base de Turso (libSQL),
-no en memoria. Antes de deployar, creá la base y corré el esquema una sola vez:
+El bot no tiene credenciales Turso ni backoffice propio. Cada mensaje se
+registra en el CRM mediante `CRM_API_URL` + `CRM_API_KEY`, y la respuesta de
+ingesta incluye el historial y el estado `bot|humano`.
 
-```bash
-turso db create tu-bot          # o usá una que ya tengas
-turso db shell tu-bot < bot/schema.sql
-turso db show tu-bot --url      # → TURSO_DATABASE_URL
-turso db tokens create tu-bot   # → TURSO_AUTH_TOKEN
-```
-
-### Backoffice — atender a mano las conversaciones que el bot derivó
-
-Cuando el clasificador decide `derivar` (queja, reclamo, pedido de hablar con
-una persona, algo delicado), el bot **deja de contestarle a ese número** y la
-conversación queda marcada como `humano` hasta que alguien la resuelve.
-
-`bot/backoffice.html` es la pantalla para eso: se ve la lista de conversaciones
-que necesitan una persona (con el hilo completo de mensajes), se puede responder
-directamente por WhatsApp desde ahí, y con "Devolver al bot" la conversación
-vuelve a ser atendida automáticamente.
-
-- URL: `https://tu-proyecto.vercel.app/backoffice`
-- Config: `BACKOFFICE_SESSION_SECRET` (string random para firmar la sesión, ej.
-  `openssl rand -hex 32`). Correr una vez `bot/schema.sql` en la base de Turso.
-- Se actualiza sola cada pocos segundos (polling simple, sin websockets).
-
-**Login por agente (no hay contraseña única compartida).** Cada persona que
-atiende conversaciones tiene su propio usuario:
-
-```bash
-cd bot
-node scripts/crear-agente.mjs valentina "unaClaveSegura" "Valentina"
-```
-
-El mismo comando sirve para resetear la contraseña de un agente que ya existe.
-Necesita `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` en el entorno (o un `.env`
-en `bot/`, por ejemplo bajado con `vercel env pull`).
-
-**Asignación.** Cada conversación puede quedar tomada por un agente (se asigna
-sola al primero que contesta, o se puede tomar/reasignar a mano desde el
-selector del panel). Tabs rápidos en la lista: *Esperan persona*, *Mías*,
-*Sin asignar*, *Todas* — combinables con un filtro de canal y de etiqueta.
-
-**Etiquetas y notas privadas.** Cada conversación se puede taguear (queja, vip,
-lo que quieras) desde el panel. Las notas (pestaña "📝 Notas" del panel) son
-para dejar contexto entre agentes — nunca se mandan por WhatsApp ni las ve el
-modelo.
-
-**Respuestas rápidas.** El botón ⚡ del compositor abre las respuestas
-guardadas (clave + texto) y las gestionás ahí mismo ("⚙️ Gestionar respuestas
-rápidas"); útil para lo que se contesta seguido (horarios, forma de pago, etc.).
-
-**Bandeja unificada (multi-canal), opcional.** Si el negocio tiene más de un
-número de WhatsApp mandando al mismo webhook (ej. dos locales bajo la misma
-WABA), completá `CANALES` en `bot/lib/config.js` con el nombre de cada Phone
-Number ID. El backoffice detecta el canal de cada mensaje automáticamente, lo
-muestra como filtro, y contesta siempre por el número correcto — no hace falta
-nada más si todos los números comparten el mismo `WHATSAPP_TOKEN` (caso típico
-cuando están bajo la misma cuenta de negocio de Meta).
+Si el CRM no responde dentro de aproximadamente dos segundos, el bot reintenta
+una vez y sigue atendiendo con el mensaje actual como contexto. Registra un
+evento técnico sin contenido ni teléfono completo; no hay una cola durable.
+Las respuestas de agentes humanos salen directamente desde el CRM por el canal
+de WhatsApp cifrado en la base central.
 
 ---
 
-## 4. pedidos/ — PWA de mostrador (confirmar pedidos a mano)
+## 5. pedidos/ — PWA de mostrador (confirmar pedidos a mano)
 
 La contraparte **visual** del bot para carnicerías/verdulerías. El bot arma el
 pedido con el cliente pero **nunca lo confirma solo**: lo deja `pendiente` y el

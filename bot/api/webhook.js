@@ -1,7 +1,63 @@
+import { waitUntil } from "@vercel/functions";
 import { responder } from "../lib/router.js";
 import { enviarTexto } from "../lib/whatsapp.js";
-import { nombreCanal } from "../lib/config.js";
-import { upsertConversacion, getConversacion, setEstado, agregarMensaje, historialParaModelo } from "../lib/db.js";
+import { registrarMensajeSeguro } from "../lib/crm.js";
+
+export function historialParaRespuesta(ingreso, textoActual) {
+  return ingreso?.historial?.length
+    ? ingreso.historial
+    : [{ role: "user", content: textoActual }];
+}
+
+export async function procesarWebhook(body) {
+  try {
+    const value = body?.entry?.[0]?.changes?.[0]?.value;
+    const msg = value?.messages?.[0];
+
+    // Ignorar notificaciones de estado (entregado/leído) y no-texto.
+    if (!msg || msg.type !== "text") return;
+
+    const numero = msg.from;
+    const texto = msg.text.body;
+    const nombreContacto = value?.contacts?.[0]?.profile?.name || null;
+    const canal = value?.metadata?.phone_number_id || process.env.PHONE_NUMBER_ID || null;
+
+    const ingreso = await registrarMensajeSeguro(
+      {
+        numero,
+        nombre: nombreContacto,
+        phoneNumberId: canal,
+        rol: "user",
+        contenido: texto,
+        idExterno: msg.id || null,
+      },
+      { etapa: "mensaje_entrante", messageId: msg.id || null }
+    );
+
+    // Si una persona atiende el chat, el CRM frena al bot. Ante una caída
+    // central se degrada a responder usando solo el mensaje actual.
+    if (ingreso?.duplicado) return;
+    if (ingreso?.estado === "humano") return;
+    const historial = historialParaRespuesta(ingreso, texto);
+    const { texto: respuesta, derivar } = await responder(historial, { numero });
+
+    const envio = await enviarTexto(numero, respuesta, canal);
+    if (!envio.ok) return;
+    await registrarMensajeSeguro(
+      {
+        numero,
+        phoneNumberId: canal,
+        rol: "assistant",
+        contenido: respuesta,
+        idExterno: envio.id || null,
+        derivar: !!derivar,
+      },
+      { etapa: derivar ? "respuesta_y_derivacion" : "respuesta_bot", messageId: envio.id || msg.id || null }
+    );
+  } catch {
+    console.error(JSON.stringify({ event: "webhook_processing_failed" }));
+  }
+}
 
 export default async function handler(req, res) {
   // ── Verificación del webhook (Meta hace un GET al conectar) ──
@@ -17,40 +73,9 @@ export default async function handler(req, res) {
 
   // ── Mensajes entrantes ──
   if (req.method === "POST") {
-    // Respondemos 200 rápido para que Meta no reintente; procesamos después.
-    res.status(200).json({ ok: true });
-
-    try {
-      const value = req.body?.entry?.[0]?.changes?.[0]?.value;
-      const msg = value?.messages?.[0];
-
-      // Ignorar notificaciones de estado (entregado/leído) y no-texto.
-      if (!msg || msg.type !== "text") return;
-
-      const numero = msg.from;
-      const texto = msg.text.body;
-      const nombreContacto = value?.contacts?.[0]?.profile?.name || null;
-      const canal = value?.metadata?.phone_number_id || process.env.PHONE_NUMBER_ID || null;
-
-      await upsertConversacion(numero, nombreContacto, canal, nombreCanal(canal));
-      await agregarMensaje(numero, "user", texto);
-
-      // Si una persona ya está atendiendo esta conversación desde el backoffice,
-      // el bot no contesta: solo queda registrado el mensaje para que lo vea ahí.
-      const conv = await getConversacion(numero);
-      if (conv?.estado === "humano") return;
-
-      const historial = await historialParaModelo(numero);
-      const { texto: respuesta, derivar } = await responder(historial);
-
-      await agregarMensaje(numero, "assistant", respuesta);
-      if (derivar) await setEstado(numero, "humano");
-
-      await enviarTexto(numero, respuesta, conv?.canal || canal);
-    } catch (e) {
-      console.error("Error procesando mensaje:", e);
-    }
-    return;
+    // Meta recibe el 200 enseguida y Vercel mantiene viva la promesa en segundo plano.
+    waitUntil(procesarWebhook(req.body));
+    return res.status(200).json({ ok: true });
   }
 
   return res.status(405).send("Method not allowed");

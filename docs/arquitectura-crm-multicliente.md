@@ -1,8 +1,15 @@
 # Arquitectura: bots por negocio + CRM unificado multi-cliente
 
 Base central: **`whatsbot-demo-logs`** (Turso/libSQL). Las tablas nuevas del CRM
-conviven con las `Demo*` existentes sin conflicto de nombres; cuando el CRM esté
-andando, las `Demo*` se migran y se borran (ver §6).
+conviven con las `Demo*` existentes sin conflicto de nombres. Las tablas del
+demo, catálogo y pedidos permanecen separadas y no forman parte del cutover del
+CRM operativo.
+
+> **Implementado en `crm/`.** El esquema SQL canónico es
+> `crm/migrations/001-crm-inicial.sql`; incluye las restricciones e índices que
+> refuerzan este modelo conceptual, el registro `_importacion_legacy` y el único
+> tier inicial `full`. Las rutas públicas se concentran en una sola Vercel
+> Function mediante `crm/api/index.js`.
 
 ---
 
@@ -250,15 +257,16 @@ bot no puede nombrar a otro negocio ni queriendo):
 
 ```
 POST /api/ingest/mensaje
-  { numero, nombre?, phoneNumberId?, rol, contenido }
-  → { estado: 'bot' | 'humano' }
+  { numero, nombre?, phoneNumberId?, rol, contenido, idExterno?, derivar? }
+  → { conversacionId, estado: 'bot' | 'humano', historial?, duplicado? }
 ```
 
 Un solo endpoint sincrónico en el hot path: el bot registra el mensaje entrante
 y **en la misma respuesta** se entera si la conversación está en modo `humano`
 (entonces no contesta). Cuando el propio bot responde, manda otro
-`POST /api/ingest/mensaje` con `rol: 'assistant'` — ese puede ser
-fire-and-forget. Cuando el clasificador decide derivar:
+`POST /api/ingest/mensaje` con `rol: 'assistant'`; si el clasificador decide
+derivar, esa misma escritura incluye `derivar: true` para guardar la respuesta y
+cambiar el estado atómicamente. Para una derivación sin mensaje asociado:
 
 ```
 POST /api/ingest/derivar   { numero }   → marca estado='humano'
@@ -272,9 +280,11 @@ que exponga ningún endpoint propio ni comparta secretos con el CRM.
 
 **Si el CRM está caído** (single point of failure, ver §6): el bot no puede
 saber si la conversación estaba en `humano`. Regla de degradación explícita:
-timeout corto (~2s) y el bot **responde igual** (mejor un bot que contesta una
+timeout corto (~2s), un único reintento de red/5xx y el bot **responde igual**
+(mejor un bot que contesta una
 conversación derivada durante un incidente, que todos los clientes mudos), y
-loguea el evento para reintentarlo. Si preferís lo contrario para quejas
+emite un log estructurado sin contenido, teléfono completo ni secretos. No hay
+outbox ni reintento durable. Si preferís lo contrario para quejas
 delicadas, es un if — pero decidilo a propósito, no por omisión.
 
 ---
@@ -288,6 +298,9 @@ delicadas, es un if — pero decidilo a propósito, no por omisión.
 // features(negocioId) → { maxAgentes: 3, etiquetas: true, notas: true, ... }
 // resolución: defaults del código ← PlanFeature[tier] ← NegocioFeature
 ```
+
+El seed inicial crea únicamente `full`: etiquetas, notas, valoración, atajos y
+gestión de usuarios activas, con `maxAgentes` ilimitado.
 
 - **Backend:** `if (!feats.etiquetas) return res.status(403)...` en el handler
   correspondiente. El chequeo de verdad vive acá.
@@ -337,9 +350,8 @@ base-propia — la arquitectura no lo prohíbe, el CRM simplemente no lo muestra
    (migrar datos → switchear bot) no pierde mensajes porque la base vieja queda
    congelada de solo-lectura al switchear.
 
-Las tablas `Demo*` de `whatsbot-demo-logs` se migran igual (cada `negocio` TEXT
-del demo → un `Negocio`) o se dejan como están si preferís que el demo siga
-aparte; no chocan con el esquema nuevo.
+Las tablas `Demo*` de `whatsbot-demo-logs` quedan intactas y separadas; no son
+una fuente de importación para `migrar-negocio`.
 
 **d) Campos custom por negocio a futuro.** No hacer `ALTER TABLE` por cliente:
 para eso está `Conversacion.datosExtra` (JSON). SQLite/libSQL tiene `json_extract`
