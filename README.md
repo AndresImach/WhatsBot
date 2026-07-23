@@ -86,6 +86,21 @@ conversaciones" hay un filtro por negocio en vez de por canal. Las respuestas
 rápidas también se pueden scopear por negocio (una clave `horario` puede tener
 un texto distinto para el cine que para la rotisería) o dejarse globales.
 
+### CRM de concesionaria
+
+`demo/crm.html` es el backoffice CRM de la agencia de autos ("Usados y
+Nuevos Tucumán"). La pestaña **Chats es real**: usa el mismo backend y el
+mismo login por agente que `demo/backoffice.html` (conversaciones, responder,
+devolver al bot, asignación, etiquetas, notas, valoración y respuestas
+rápidas), scopeada al negocio `usadosnuevos` (`?n=<clave>` para apuntarla a
+otro). **Equipo** también es real: lista los agentes y gestiona las
+respuestas rápidas contra la API. Las demás pestañas (inventario, kanban de
+leads, turnos, tomas de usado) siguen siendo maqueta con datos en memoria
+— están marcadas "Datos de ejemplo" — hasta que exista backend para eso.
+URL: `https://tu-proyecto.vercel.app/crm`. Necesita las mismas env vars que
+el backoffice (`LOG_TURSO_*`, `BACKOFFICE_SESSION_SECRET`) y agentes creados
+con `scripts/crear-agente.mjs`. Cero dependencias.
+
 ---
 
 ## 3. bot/ — el chatbot que vendés
